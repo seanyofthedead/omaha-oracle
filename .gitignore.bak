@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# AWS
+cdk.out/
+.aws-sam/
+
+# IDE
+.cursor/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (don't commit raw financial data)
+data/
+*.csv
+*.parquet
+infra/layer/
+infra\layer/
