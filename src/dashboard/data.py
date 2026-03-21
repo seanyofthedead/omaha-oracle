@@ -1,13 +1,27 @@
 """
 Data loading for dashboard — DynamoDB and S3.
+
+Every public function is cached with ``@st.cache_data`` and an explicit TTL
+so repeat visits within the window are instant.
+
+Functions raise ``DataLoadError`` on failure so views can show actionable
+error messages.  ``@st.cache_data`` does **not** cache exceptions — a failing
+call will be retried on the next Streamlit rerun.
 """
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from typing import Any
 
+import streamlit as st
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import (
+    ClientError,
+    EndpointConnectionError,
+    NoCredentialsError,
+)
 
 from shared.analysis_client import merge_latest_analysis
 from shared.config import get_config
@@ -19,7 +33,49 @@ from shared.s3_client import S3Client
 
 _log = get_logger(__name__)
 
+# ── TTL constants (seconds) ──────────────────────────────────────────────
+_TTL_MARKET = 300  # 5 min  — portfolio positions, decisions
+_TTL_ANALYSIS = 600  # 10 min — watchlist analysis, lessons, cost data
+_TTL_STATIC = 3600  # 1 hour — letters, postmortems, config thresholds
 
+
+class DataLoadError(Exception):
+    """Raised when a dashboard data-loading function fails.
+
+    Carries a user-facing message (no tracebacks) that views can pass
+    directly to ``st.error()``.
+    """
+
+
+def _friendly_aws_message(exc: Exception, resource: str) -> str:
+    """Turn an AWS/network exception into a user-friendly sentence."""
+    if isinstance(exc, NoCredentialsError):
+        return (
+            f"Could not load {resource}: AWS credentials are missing. "
+            "Check your AWS_PROFILE or environment variables."
+        )
+    if isinstance(exc, EndpointConnectionError):
+        return (
+            f"Could not load {resource}: unable to reach AWS. "
+            "Check your network connection and VPN."
+        )
+    if isinstance(exc, ClientError):
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code == "ResourceNotFoundException":
+            return (
+                f"Could not load {resource}: the DynamoDB table does not exist. "
+                "Run 'cdk deploy' to create infrastructure."
+            )
+        if code in ("AccessDeniedException", "UnauthorizedAccess"):
+            return (
+                f"Could not load {resource}: access denied. "
+                "Check your IAM permissions."
+            )
+        return f"Could not load {resource}: AWS error ({code}). Try again shortly."
+    return f"Could not load {resource}: {type(exc).__name__}. Try again shortly."
+
+
+@st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
 def load_portfolio() -> dict[str, Any]:
     """Load portfolio summary and positions."""
     try:
@@ -27,7 +83,7 @@ def load_portfolio() -> dict[str, Any]:
         state = load_portfolio_state(cfg.table_portfolio)
     except Exception as exc:
         _log.warning("load_portfolio failed", extra={"error": str(exc)})
-        return {"cash": 0.0, "portfolio_value": 0.0, "positions": []}
+        raise DataLoadError(_friendly_aws_message(exc, "portfolio positions")) from exc
 
     return {
         "cash": state["cash_available"],
@@ -36,10 +92,9 @@ def load_portfolio() -> dict[str, Any]:
     }
 
 
+@st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
 def load_watchlist_analysis() -> list[dict[str, Any]]:
     """Load watchlist tickers with latest moat/mgmt/IV analysis."""
-    from concurrent.futures import ThreadPoolExecutor
-
     try:
         cfg = get_config()
         watchlist_client = DynamoClient(cfg.table_watchlist)
@@ -48,7 +103,9 @@ def load_watchlist_analysis() -> list[dict[str, Any]]:
         tickers = [i.get("ticker", "").strip().upper() for i in watch_items if i.get("ticker")]
     except Exception as exc:
         _log.warning("load_watchlist_analysis failed", extra={"error": str(exc)})
-        return []
+        raise DataLoadError(
+            _friendly_aws_message(exc, "watchlist data")
+        ) from exc
 
     if not tickers:
         return []
@@ -66,7 +123,9 @@ def load_watchlist_analysis() -> list[dict[str, Any]]:
         all_items = [item for ticker_items in results for item in ticker_items]
     except Exception as exc:
         _log.warning("load_watchlist_analysis analysis query failed", extra={"error": str(exc)})
-        return []
+        raise DataLoadError(
+            _friendly_aws_message(exc, "analysis results for watchlist tickers")
+        ) from exc
 
     tickers_set = set(tickers)
 
@@ -89,12 +148,13 @@ def load_watchlist_analysis() -> list[dict[str, Any]]:
     return candidates
 
 
+@st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
 def load_decisions(limit: int = 50) -> list[dict[str, Any]]:
     """Load recent decisions (buy/sell signals) sorted by timestamp."""
     try:
         cfg = get_config()
         client = DynamoClient(cfg.table_decisions)
-        items = client.query(
+        return client.query(
             Key("record_type").eq("DECISION"),
             index_name="record_type-timestamp-index",
             scan_forward=False,
@@ -102,16 +162,16 @@ def load_decisions(limit: int = 50) -> list[dict[str, Any]]:
         )
     except Exception as exc:
         _log.warning("load_decisions failed", extra={"error": str(exc)})
-        return []
-    return items
+        raise DataLoadError(
+            _friendly_aws_message(exc, "buy/sell decisions")
+        ) from exc
 
 
+@st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
 def load_cost_data(months: int = 12) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Load monthly spend and budget status."""
     try:
         tracker = CostTracker()
-        from datetime import UTC, datetime
-
         dt = datetime.now(UTC)
         month_keys = []
         for i in range(months):
@@ -130,15 +190,12 @@ def load_cost_data(months: int = 12) -> tuple[list[dict[str, Any]], dict[str, An
         return history, status
     except Exception as exc:
         _log.warning("load_cost_data failed", extra={"error": str(exc)})
-        return [], {
-            "budget_usd": 0,
-            "spent_usd": 0,
-            "remaining_usd": 0,
-            "exhausted": False,
-            "utilization_pct": 0,
-        }
+        raise DataLoadError(
+            _friendly_aws_message(exc, "LLM cost data")
+        ) from exc
 
 
+@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_letter_keys() -> list[str]:
     """List Owner's Letter keys in S3 (letters/...)."""
     try:
@@ -148,9 +205,12 @@ def load_letter_keys() -> list[str]:
         return sorted(keys, reverse=True)
     except Exception as exc:
         _log.warning("load_letter_keys failed", extra={"error": str(exc)})
-        return []
+        raise DataLoadError(
+            _friendly_aws_message(exc, "owner's letter archive")
+        ) from exc
 
 
+@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_letter_content(key: str) -> str:
     """Load markdown content of a letter."""
     try:
@@ -159,9 +219,12 @@ def load_letter_content(key: str) -> str:
         return s3.read_markdown(key)
     except Exception as exc:
         _log.warning("load_letter_content failed", extra={"key": key, "error": str(exc)})
-        return f"*Failed to load {key}*"
+        raise DataLoadError(
+            _friendly_aws_message(exc, f"letter '{key}'")
+        ) from exc
 
 
+@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_postmortem_keys() -> list[str]:
     """List postmortem JSON keys in S3."""
     try:
@@ -171,9 +234,12 @@ def load_postmortem_keys() -> list[str]:
         return sorted(keys, reverse=True)
     except Exception as exc:
         _log.warning("load_postmortem_keys failed", extra={"error": str(exc)})
-        return []
+        raise DataLoadError(
+            _friendly_aws_message(exc, "postmortem archive")
+        ) from exc
 
 
+@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_postmortem(key: str) -> dict[str, Any]:
     """Load postmortem JSON."""
     try:
@@ -182,14 +248,15 @@ def load_postmortem(key: str) -> dict[str, Any]:
         return s3.read_json(key)
     except Exception as exc:
         _log.warning("load_postmortem failed", extra={"key": key, "error": str(exc)})
-        return {}
+        raise DataLoadError(
+            _friendly_aws_message(exc, f"postmortem '{key}'")
+        ) from exc
 
 
+@st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
 def load_lessons() -> list[dict[str, Any]]:
     """Load active lessons from DynamoDB."""
     try:
-        from datetime import UTC, datetime
-
         cfg = get_config()
         client = DynamoClient(cfg.table_lessons)
         now = datetime.now(UTC).isoformat()
@@ -199,9 +266,12 @@ def load_lessons() -> list[dict[str, Any]]:
         )
     except Exception as exc:
         _log.warning("load_lessons failed", extra={"error": str(exc)})
-        return []
+        raise DataLoadError(
+            _friendly_aws_message(exc, "active lessons")
+        ) from exc
 
 
+@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_config_thresholds() -> dict[str, Any]:
     """Load screening thresholds from config table."""
     try:
@@ -211,4 +281,6 @@ def load_config_thresholds() -> dict[str, Any]:
         return (item.get("value") or {}) if item else {}
     except Exception as exc:
         _log.warning("load_config_thresholds failed", extra={"error": str(exc)})
-        return {}
+        raise DataLoadError(
+            _friendly_aws_message(exc, "screening thresholds")
+        ) from exc

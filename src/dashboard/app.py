@@ -13,6 +13,7 @@ For Lambda deployment, use a container (Streamlit is not ASGI/Mangum-compatible)
 
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -20,9 +21,10 @@ from pathlib import Path
 if str(Path(__file__).resolve().parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import importlib
-
 import streamlit as st
+
+from dashboard.sidebar import render_sidebar
+from dashboard.styles import apply_custom_styles
 
 _PAGE_MODULES = {
     "Portfolio Overview": "dashboard.views.portfolio",
@@ -47,8 +49,7 @@ def _require_auth() -> None:
         st.session_state.authenticated = False
 
     if not st.session_state.authenticated:
-        st.set_page_config(page_title="Omaha Oracle — Login", page_icon="🔒")
-        st.title("🔒 Omaha Oracle")
+        st.title("Omaha Oracle")
         st.markdown("Enter the dashboard password to continue.")
         pwd = st.text_input("Password", type="password", key="login_pwd")
         if st.button("Login"):
@@ -63,17 +64,17 @@ def _require_auth() -> None:
 
 def main() -> None:
     """Configure the Streamlit app and render the selected page."""
-    _require_auth()
     st.set_page_config(
-        page_title="Omaha Oracle",
-        page_icon="📊",
+        page_title="Omaha Oracle | Dashboard",
+        page_icon="♠",
         layout="wide",
         initial_sidebar_state="expanded",
     )
-    st.sidebar.title("Omaha Oracle")
-    st.sidebar.markdown("*Monitoring dashboard*")
+    apply_custom_styles()
+    _require_auth()
 
-    selection = st.sidebar.radio("Page", list(_PAGE_MODULES.keys()))
+    selection = render_sidebar(list(_PAGE_MODULES.keys()))
+
     page = importlib.import_module(_PAGE_MODULES[selection])
     page.render()
 
