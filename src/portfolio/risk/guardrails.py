@@ -4,28 +4,23 @@ Pure Python guardrails — NO LLM.
 Programmatic enforcement of hard limits: position size, sector allocation,
 no leverage/shorts/options/crypto, budget exhaustion, cash reserve.
 """
+
 from __future__ import annotations
 
 from typing import Any
+
+from shared.converters import safe_float
 
 MAX_POSITION_PCT = 0.15
 MAX_SECTOR_PCT = 0.35
 MIN_CASH_RESERVE_PCT = 0.10
 
 
-def _safe_float(val: Any) -> float:
-    if val is None:
-        return 0.0
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return 0.0
-
-
 def check_all_guardrails(
     proposed_action: dict[str, Any],
     portfolio_state: dict[str, Any],
     budget_status: dict[str, Any],
+    pending_decisions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Enforce hard limits on proposed actions.
@@ -46,6 +41,10 @@ def check_all_guardrails(
         portfolio_value, cash_available, positions, sector_exposure.
     budget_status : dict
         exhausted (bool), budget_usd, spent_usd, etc. from CostTracker.
+    pending_decisions : list, optional
+        Already-approved BUY decisions earlier in the same batch.  Used to
+        prevent two buys in the same sector both passing the 35% limit check
+        individually while collectively breaching it.
 
     Returns
     -------
@@ -75,8 +74,8 @@ def check_all_guardrails(
         violations.append("LLM budget exhausted — no new analysis allowed")
 
     # Cash reserve (10% minimum)
-    portfolio_value = _safe_float(portfolio_state.get("portfolio_value", 0))
-    cash = _safe_float(portfolio_state.get("cash_available", 0))
+    portfolio_value = safe_float(portfolio_state.get("portfolio_value", 0))
+    cash = safe_float(portfolio_state.get("cash_available", 0))
     if portfolio_value > 0:
         cash_pct = cash / portfolio_value
         if cash_pct < MIN_CASH_RESERVE_PCT:
@@ -86,42 +85,38 @@ def check_all_guardrails(
 
     # BUY-specific: max position, max sector
     if signal == "BUY" or side == "buy":
-        position_usd = _safe_float(proposed_action.get("position_size_usd", 0))
-        position_pct = _safe_float(proposed_action.get("position_pct", 0))
+        position_usd = safe_float(proposed_action.get("position_size_usd", 0))
+        position_pct = safe_float(proposed_action.get("position_pct", 0))
         if position_usd > 0 and portfolio_value > 0:
             pct = position_usd / portfolio_value
             if pct > MAX_POSITION_PCT:
-                violations.append(
-                    f"Position {pct:.1%} exceeds max {MAX_POSITION_PCT:.0%}"
-                )
+                violations.append(f"Position {pct:.1%} exceeds max {MAX_POSITION_PCT:.0%}")
         elif position_pct > MAX_POSITION_PCT:
-            violations.append(
-                f"Position pct {position_pct:.1%} exceeds max {MAX_POSITION_PCT:.0%}"
-            )
+            violations.append(f"Position pct {position_pct:.1%} exceeds max {MAX_POSITION_PCT:.0%}")
 
         sector = proposed_action.get("sector", "Unknown")
-        sector_exposure = _safe_float(
-            portfolio_state.get("sector_exposure", {}).get(sector, 0)
-        )
+        sector_exposure = safe_float(portfolio_state.get("sector_exposure", {}).get(sector, 0))
         if position_usd > 0 and portfolio_value > 0:
-            new_sector_value = (
-                sum(
-                    p.get("market_value", 0)
-                    for p in portfolio_state.get("positions", [])
-                    if p.get("sector") == sector
-                )
-                + position_usd
+            # Sum existing positions in this sector
+            existing_sector_value = sum(
+                p.get("market_value", 0)
+                for p in portfolio_state.get("positions", [])
+                if p.get("sector") == sector
             )
+            # Also include pending BUY decisions in this sector from the same batch
+            pending_sector_usd = sum(
+                safe_float(d.get("position_size_usd", 0))
+                for d in (pending_decisions or [])
+                if d.get("sector") == sector and (d.get("signal") or "").upper() == "BUY"
+            )
+            new_sector_value = existing_sector_value + pending_sector_usd + position_usd
             new_sector_pct = new_sector_value / portfolio_value
             if new_sector_pct > MAX_SECTOR_PCT:
                 violations.append(
-                    f"Sector {sector} would reach {new_sector_pct:.1%} "
-                    f"(max {MAX_SECTOR_PCT:.0%})"
+                    f"Sector {sector} would reach {new_sector_pct:.1%} (max {MAX_SECTOR_PCT:.0%})"
                 )
         elif sector_exposure >= MAX_SECTOR_PCT:
-            violations.append(
-                f"Sector {sector} already at limit ({sector_exposure:.1%})"
-            )
+            violations.append(f"Sector {sector} already at limit ({sector_exposure:.1%})")
 
     passed = len(violations) == 0
     return {"passed": passed, "violations": violations}

@@ -7,6 +7,7 @@ End-to-end feedback loop integration test.
 - Verify LessonsClient loads and injects those lessons
 - Verify confidence adjustment factor applied to moat scores
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -15,15 +16,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
-from shared.dynamo_client import DynamoClient
-from shared.lessons_client import LessonsClient
-
 from monitoring.owners_letter.handler import (
-    _classify_outcome,
     _extract_lessons,
     _run_outcome_audit,
 )
+from shared.dynamo_client import DynamoClient
+from shared.lessons_client import LessonsClient
 from tests.conftest import TABLE_DECISIONS, TABLE_LESSONS  # noqa: F401
 from tests.fixtures.mock_data import make_decision
 

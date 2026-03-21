@@ -1,0 +1,1 @@
+"""FRED macroeconomic data ingestion."""

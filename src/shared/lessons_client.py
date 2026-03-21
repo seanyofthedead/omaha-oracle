@@ -3,6 +3,7 @@ LessonsClient — feedback loop glue connecting post-mortems to future analysis.
 
 Queries lessons DynamoDB table, scores by relevance, formats for prompt injection.
 """
+
 from __future__ import annotations
 
 import math
@@ -49,6 +50,7 @@ class LessonsClient:
     """
 
     def __init__(self, table_name: str | None = None) -> None:
+        """Initialize the client, defaulting to the configured lessons table."""
         cfg = get_config()
         self._table_name = table_name or cfg.table_lessons
         self._db = DynamoClient(self._table_name)
@@ -71,14 +73,14 @@ class LessonsClient:
         """
         now = datetime.now(UTC).isoformat()
         stage_types = _stage_to_lesson_types(analysis_stage)
-        all_lessons: list[dict[str, Any]] = []
+        if not stage_types:
+            return ""
 
-        for lesson_type in stage_types:
-            items = self._db.query(
-                Key("lesson_type").eq(lesson_type),
-                filter_expression=Attr("active").eq(True) & Attr("expires_at").gt(now),
-            )
-            all_lessons.extend(items)
+        all_lessons = self._db.query(
+            Key("active_flag").eq("1") & Key("expires_at").gt(now),
+            index_name="active_flag-expires_at-index",
+            filter_expression=Attr("lesson_type").is_in(stage_types),
+        )
 
         # Filter and score
         scored: list[tuple[int, dict[str, Any]]] = []
@@ -101,13 +103,11 @@ class LessonsClient:
             if lesson_industry != "all" and lesson_industry == industry_lower:
                 score += SCORE_INDUSTRY
 
-            lesson_stage = (
-                lesson.get("confidence_calibration", {}) or {}
-            ).get("analysis_stage", "")
+            lesson_stage = (lesson.get("confidence_calibration", {}) or {}).get(
+                "analysis_stage", ""
+            )
             scope = (lesson.get("threshold_adjustment", {}) or {}).get("scope", "")
-            if lesson_stage == analysis_stage or (
-                scope and analysis_stage in scope.lower()
-            ):
+            if lesson_stage == analysis_stage or (scope and analysis_stage in scope.lower()):
                 score += SCORE_STAGE
 
             severity = (lesson.get("severity") or "minor").lower()
@@ -128,7 +128,10 @@ class LessonsClient:
                         if quarters_ago >= 0 and quarters_ago < RECENCY_QUARTERS_MAX:
                             score += max(0, RECENCY_QUARTERS_MAX - quarters_ago)
                 except (ValueError, IndexError):
-                    pass
+                    _log.debug(
+                        "Could not parse quarter for recency score",
+                        extra={"quarter": quarter},
+                    )
 
             if score > 0:
                 scored.append((score, lesson))
@@ -192,30 +195,22 @@ class LessonsClient:
         now = datetime.now(UTC).isoformat()
         expired = 0
 
-        items = self._db.scan_all(
-            filter_expression=Attr("active").eq(True) & Attr("expires_at").lt(now),
+        items = self._db.query(
+            Key("active_flag").eq("1") & Key("expires_at").lt(now),
+            index_name="active_flag-expires_at-index",
         )
 
-        for lesson in items:
+        if items:
+            for lesson in items:
+                lesson["active"] = False
+                lesson["active_flag"] = "0"
             try:
-                self._db.update_item(
-                    key={
-                        "lesson_type": lesson["lesson_type"],
-                        "lesson_id": lesson["lesson_id"],
-                    },
-                    update_expression="SET #a = :false",
-                    expression_attribute_values={":false": False},
-                    expression_attribute_names={"#a": "active"},
-                )
-                expired += 1
+                self._db.batch_write(items)
+                expired = len(items)
             except Exception as exc:
                 _log.warning(
-                    "Failed to expire lesson",
-                    extra={
-                        "lesson_type": lesson.get("lesson_type"),
-                        "lesson_id": lesson.get("lesson_id"),
-                        "error": str(exc),
-                    },
+                    "Failed to batch-expire lessons",
+                    extra={"count": len(items), "error": str(exc)},
                 )
 
         if expired:

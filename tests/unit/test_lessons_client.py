@@ -8,10 +8,10 @@ Unit tests for LessonsClient — feedback loop.
 - Prompt injection formatting includes header and lesson text
 - Max lessons limit respected
 """
+
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -22,7 +22,6 @@ from shared.lessons_client import (
     HEADER,
     LessonsClient,
 )
-
 from tests.fixtures.mock_data import (
     LESSON_CONFIDENCE_08,
     LESSON_CONFIDENCE_125,
@@ -36,6 +35,7 @@ from tests.fixtures.mock_data import (
 
 def _seed_lesson(table, lesson: dict) -> None:
     """Put lesson into DynamoDB, converting floats to Decimal."""
+
     def _to_decimal(obj):
         if isinstance(obj, dict):
             return {k: _to_decimal(v) for k, v in obj.items()}
@@ -115,8 +115,13 @@ class TestConfidenceAdjustment:
 
     def test_clamped_to_bounds(self, lessons_client: LessonsClient, lessons_table):
         extreme_low = make_lesson(
-            "confidence_calibration", "L-low",
-            confidence_calibration={"analysis_stage": "moat_analysis", "sector": "Tech", "adjustment_factor": Decimal("0.1")},
+            "confidence_calibration",
+            "L-low",
+            confidence_calibration={
+                "analysis_stage": "moat_analysis",
+                "sector": "Tech",
+                "adjustment_factor": Decimal("0.1"),
+            },
         )
         _seed_lesson(lessons_table, extreme_low)
         adj = lessons_client.get_confidence_adjustment("moat_analysis", "Tech")
@@ -157,7 +162,9 @@ class TestMaxLessonsLimit:
 
     def test_max_lessons_respected(self, lessons_client: LessonsClient, lessons_table):
         for i in range(10):
-            lesson = make_lesson("moat_bias", f"L{i}", sector="Technology", prompt_injection_text=f"Lesson {i}")
+            lesson = make_lesson(
+                "moat_bias", f"L{i}", sector="Technology", prompt_injection_text=f"Lesson {i}"
+            )
             _seed_lesson(lessons_table, lesson)
         result = lessons_client.get_relevant_lessons(
             ticker="MSFT",
@@ -166,5 +173,5 @@ class TestMaxLessonsLimit:
             analysis_stage="moat_analysis",
             max_lessons=3,
         )
-        lines = [l for l in result.split("\n") if l.strip().startswith("-")]
+        lines = [line for line in result.split("\n") if line.strip().startswith("-")]
         assert len(lines) <= 3

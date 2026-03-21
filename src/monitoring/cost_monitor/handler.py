@@ -4,10 +4,13 @@ Daily Lambda: LLM + AWS spend vs $67/month budget.
 Gets LLM spend from CostTracker, AWS spend from Cost Explorer (Project=omaha-oracle),
 sends SNS alert if utilization > 80%.
 """
+
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from decimal import Decimal
+from functools import lru_cache
 from typing import Any
 
 import boto3
@@ -18,11 +21,28 @@ from shared.logger import get_logger
 
 _log = get_logger(__name__)
 
-MONTHLY_BUDGET_USD = 67.0
 ALERT_THRESHOLD_PCT = 80.0
+
+
+def _monthly_budget_usd() -> float:
+    """Read the monthly budget from config; fall back to 67.0 if config unavailable."""
+    try:
+        return get_config().monthly_llm_budget_usd
+    except Exception:
+        return 67.0
+
 
 # Cost Explorer is only available in us-east-1
 CE_REGION = "us-east-1"
+
+# Reuse the boto3 connection pool across warm Lambda invocations
+_CE_CLIENT = boto3.client("ce", region_name=CE_REGION)
+
+
+@lru_cache(maxsize=1)
+def _sns_client(region: str) -> Any:
+    """Return a cached SNS client for the given region."""
+    return boto3.client("sns", region_name=region)
 
 
 def _get_llm_spend(month_key: str) -> float:
@@ -43,9 +63,8 @@ def _get_aws_spend(month_key: str) -> float:
     else:
         end = f"{year}-{month_int + 1:02d}-01"
 
-    client = boto3.client("ce", region_name=CE_REGION)
     try:
-        response = client.get_cost_and_usage(
+        response = _CE_CLIENT.get_cost_and_usage(
             TimePeriod={"Start": start, "End": end},
             Granularity="MONTHLY",
             Metrics=["BlendedCost"],
@@ -58,8 +77,11 @@ def _get_aws_spend(month_key: str) -> float:
             },
         )
     except Exception as exc:
-        _log.warning("Cost Explorer failed — assuming $0 AWS spend", extra={"error": str(exc)})
-        return 0.0
+        _log.error(
+            "Cost Explorer unavailable — cannot compute accurate AWS spend",
+            extra={"error": str(exc)},
+        )
+        raise
 
     total = Decimal("0")
     for result in response.get("ResultsByTime", []):
@@ -81,26 +103,28 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         utilization_pct, alert_triggered
     """
     cfg = get_config()
+    monthly_budget = _monthly_budget_usd()
     now = datetime.now(UTC)
     date_str = now.strftime("%Y-%m-%d")
     month_key = now.strftime("%Y-%m")
 
-    llm_spend = _get_llm_spend(month_key)
-    aws_spend = _get_aws_spend(month_key)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_llm = ex.submit(_get_llm_spend, month_key)
+        f_aws = ex.submit(_get_aws_spend, month_key)
+    llm_spend = f_llm.result()
+    aws_spend = f_aws.result()
     total_spend = llm_spend + aws_spend
 
-    utilization_pct = (
-        (total_spend / MONTHLY_BUDGET_USD * 100) if MONTHLY_BUDGET_USD > 0 else 0.0
-    )
+    utilization_pct = (total_spend / monthly_budget * 100) if monthly_budget > 0 else 0.0
     alert_triggered = utilization_pct > ALERT_THRESHOLD_PCT
 
     if alert_triggered:
         topic_arn = cfg.sns_topic_arn
         if topic_arn:
             try:
-                sns = boto3.client("sns", region_name=cfg.aws_region)
+                sns = _sns_client(cfg.aws_region)
                 msg = (
-                    f"Omaha Oracle cost alert: {utilization_pct:.1f}% of ${MONTHLY_BUDGET_USD:.0f} "
+                    f"Omaha Oracle cost alert: {utilization_pct:.1f}% of ${monthly_budget:.0f} "
                     f"budget used (LLM: ${llm_spend:.2f}, AWS: ${aws_spend:.2f}). "
                     f"Date: {date_str}"
                 )
@@ -116,7 +140,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "llm_spend": round(llm_spend, 2),
         "aws_spend": round(aws_spend, 2),
         "total_spend": round(total_spend, 2),
-        "monthly_budget": MONTHLY_BUDGET_USD,
+        "monthly_budget": monthly_budget,
         "utilization_pct": round(utilization_pct, 2),
         "alert_triggered": alert_triggered,
     }

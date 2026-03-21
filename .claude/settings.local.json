@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(pip show:*)",
+      "Bash(python:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff check:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(wc -l /c/Users/peder/Documents/omaha_oracle/src/shared/*.py)",
+      "Bash(gh auth:*)",
+      "Bash(pip install:*)",
+      "Bash(pip audit:*)",
+      "Bash(pip-audit:*)",
+      "Bash(ruff format:*)",
+      "Bash(git stash:*)"
+    ]
+  }
+}

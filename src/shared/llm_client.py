@@ -85,13 +85,14 @@ class LLMClient:
     """
 
     def __init__(self, cost_tracker: CostTracker | None = None) -> None:
+        """Initialize the LLM client, creating a CostTracker if none is provided."""
         cfg = get_config()
         self._client = anthropic.Anthropic(api_key=cfg.get_anthropic_key())
         self._tracker = cost_tracker or CostTracker()
         self._tier_model: dict[Tier, str] = {
-            "thesis":   cfg.llm_analysis_model,  # Opus
-            "analysis": cfg.llm_sonnet_model,     # Sonnet
-            "bulk":     cfg.llm_fast_model,       # Haiku
+            "thesis": cfg.llm_analysis_model,  # Opus
+            "analysis": cfg.llm_sonnet_model,  # Sonnet
+            "bulk": cfg.llm_fast_model,  # Haiku
         }
 
     # ------------------------------------------------------------------ #
@@ -159,8 +160,7 @@ class LLMClient:
         model = self._tier_model[tier]
         effective_system = self._build_system_prompt(system_prompt, require_json)
 
-        if tier != "thesis":
-            self._assert_budget()
+        self._assert_budget(tier=tier)
 
         raw_text, usage = self._call_with_retry(
             model=model,
@@ -202,13 +202,20 @@ class LLMClient:
             prompt += _JSON_INSTRUCTION
         return prompt
 
-    def _assert_budget(self) -> None:
+    def _assert_budget(self, tier: Tier = "analysis") -> None:
+        """Raise BudgetExhaustedError if the effective budget ceiling is exceeded.
+
+        The ``thesis`` tier receives a 2× ceiling so a high-conviction write-up
+        is not silently suppressed at month-end, while still being bounded.
+        """
         status = self._tracker.check_budget()
-        if status["exhausted"]:
+        multiplier = 2.0 if tier == "thesis" else 1.0
+        effective_budget_usd = status["budget_usd"] * multiplier
+        if status["spent_usd"] >= effective_budget_usd:
             raise BudgetExhaustedError(
-                f"Monthly LLM budget exhausted: "
+                f"Monthly LLM budget exhausted (tier={tier}): "
                 f"${status['spent_usd']:.2f} spent of "
-                f"${status['budget_usd']:.2f} budget."
+                f"${effective_budget_usd:.2f} effective budget."
             )
 
     def _call_with_retry(

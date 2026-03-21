@@ -1,0 +1,9 @@
+[server]
+# Restrict WebSocket connections to same origin (default true — pinned explicitly).
+enableCORS = true
+
+# Enable XSRF protection cookie (SameSite=Strict). Required to prevent CSRF.
+enableXsrfProtection = true
+
+# Do not expose the Streamlit version in response headers.
+headless = true

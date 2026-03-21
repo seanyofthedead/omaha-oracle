@@ -16,16 +16,21 @@ from aws_cdk import (
     Duration,
 )
 from aws_cdk import (
+    aws_cloudwatch as cloudwatch,
+)
+from aws_cdk import (
+    aws_cloudwatch_actions as cw_actions,
+)
+from aws_cdk import (
     aws_iam as iam,
 )
 from aws_cdk import (
     aws_lambda as lambda_,
 )
+from aws_cdk import (
+    aws_sns as sns,
+)
 from constructs import Construct
-
-_ACCOUNT = "292085144804"
-_REGION = "us-east-1"
-
 
 class PortfolioStack(cdk.Stack):
     """
@@ -48,6 +53,8 @@ class PortfolioStack(cdk.Stack):
         super().__init__(scope, construct_id, **kwargs)  # type: ignore[arg-type]
 
         prefix = f"omaha-oracle-{env_name}"
+        alert_topic_arn = f"arn:aws:sns:{self.region}:{self.account}:{prefix}-alerts"
+        alert_topic = sns.Topic.from_topic_arn(self, "AlertTopic", alert_topic_arn)
 
         shared_env = {
             "ENVIRONMENT": env_name,
@@ -62,8 +69,9 @@ class PortfolioStack(cdk.Stack):
             "TABLE_LESSONS": f"{prefix}-lessons",
             "S3_BUCKET": f"{prefix}-data",
             "ANALYSIS_QUEUE_URL": (
-                f"https://sqs.{_REGION}.amazonaws.com/{_ACCOUNT}/{prefix}-analysis-queue"
+                f"https://sqs.{self.region}.amazonaws.com/{self.account}/{prefix}-analysis-queue"
             ),
+            "SNS_TOPIC_ARN": alert_topic_arn,
         }
 
         # ---------------------------------------------------------------- #
@@ -89,7 +97,7 @@ class PortfolioStack(cdk.Stack):
                 "dynamodb:DeleteItem",
                 "dynamodb:BatchWriteItem",
             ],
-            resources=[f"arn:aws:dynamodb:{_REGION}:{_ACCOUNT}:table/{prefix}-*"],
+            resources=[f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*"],
         )
         s3_policy = iam.PolicyStatement(
             actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
@@ -101,9 +109,26 @@ class PortfolioStack(cdk.Stack):
         ssm_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[
-                f"arn:aws:ssm:{_REGION}:{_ACCOUNT}:parameter/omaha-oracle/{env_name}/*"
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/omaha-oracle/{env_name}/*"
             ],
         )
+
+        def _add_lambda_alarms(fn: lambda_.Function, name: str) -> None:
+            """Add error and throttle alarms routing to the alert SNS topic."""
+            for metric_fn, alarm_id, desc in [
+                (fn.metric_errors, f"{name}Errors", f"{name}: Lambda errors > 0"),
+                (fn.metric_throttles, f"{name}Throttles", f"{name}: Lambda throttled"),
+            ]:
+                alarm = cloudwatch.Alarm(
+                    self,
+                    alarm_id,
+                    metric=metric_fn(),
+                    threshold=1,
+                    evaluation_periods=1,
+                    alarm_description=desc,
+                    treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+                )
+                alarm.add_alarm_action(cw_actions.SnsAction(alert_topic))
 
         def _fn(
             construct_id: str,
@@ -119,17 +144,24 @@ class PortfolioStack(cdk.Stack):
                 construct_id,
                 function_name=f"{prefix}-{construct_id.lower().replace('fn', '').strip('-')}",
                 runtime=lambda_.Runtime.PYTHON_3_12,
-                code=lambda_.Code.from_asset("../src"),
+                code=lambda_.Code.from_asset(
+                    "../src",
+                    exclude=["dashboard", "dashboard/**", "**/__pycache__", "**/*.pyc"],
+                ),
                 handler=handler,
                 description=description,
                 memory_size=memory_size,
                 timeout=timeout,
                 environment=env,
                 layers=[deps_layer],
+                # Explicit retry config — safe after idempotency guards are deployed (PR 5)
+                retry_attempts=2,
+                max_event_age=Duration.hours(1),
             )
             fn.add_to_role_policy(data_policy)
             fn.add_to_role_policy(s3_policy)
             fn.add_to_role_policy(ssm_policy)
+            _add_lambda_alarms(fn, construct_id)
             return fn
 
         # ---------------------------------------------------------------- #

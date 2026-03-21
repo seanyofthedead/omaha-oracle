@@ -1,99 +1,91 @@
 """
 Data loading for dashboard — DynamoDB and S3.
 """
+
 from __future__ import annotations
 
-from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import Key
 
+from shared.analysis_client import merge_latest_analysis
 from shared.config import get_config
 from shared.cost_tracker import CostTracker
 from shared.dynamo_client import DynamoClient
+from shared.logger import get_logger
+from shared.portfolio_helpers import load_portfolio_state
 from shared.s3_client import S3Client
 
-
-def _safe_float(val: Any) -> float:
-    if val is None:
-        return 0.0
-    if isinstance(val, Decimal):
-        return float(val)
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return 0.0
+_log = get_logger(__name__)
 
 
 def load_portfolio() -> dict[str, Any]:
     """Load portfolio summary and positions."""
     try:
         cfg = get_config()
-        client = DynamoClient(cfg.table_portfolio)
-        account = client.get_item({"pk": "ACCOUNT", "sk": "SUMMARY"})
-        positions_raw = client.query(Key("pk").eq("POSITION"), limit=100)
-    except Exception:
+        state = load_portfolio_state(cfg.table_portfolio)
+    except Exception as exc:
+        _log.warning("load_portfolio failed", extra={"error": str(exc)})
         return {"cash": 0.0, "portfolio_value": 0.0, "positions": []}
 
-    cash = _safe_float(account.get("cash_available", 0)) if account else 0.0
-    total = _safe_float(account.get("portfolio_value", 0)) if account else 0.0
-    positions = []
-    for p in positions_raw:
-        ticker = p.get("sk") or p.get("ticker", "")
-        cost = _safe_float(p.get("cost_basis", 0))
-        mv = _safe_float(p.get("market_value", 0))
-        positions.append({
-            "ticker": ticker,
-            "shares": _safe_float(p.get("shares", 0)),
-            "cost_basis": cost,
-            "market_value": mv,
-            "sector": p.get("sector", "Unknown"),
-            "purchase_date": p.get("purchase_date"),
-            "thesis_link": p.get("thesis_link"),
-        })
-    if total <= 0 and positions:
-        total = sum(p["market_value"] for p in positions) + cash
-    return {"cash": cash, "portfolio_value": total, "positions": positions}
+    return {
+        "cash": state["cash_available"],
+        "portfolio_value": state["portfolio_value"],
+        "positions": state["positions"],
+    }
 
 
 def load_watchlist_analysis() -> list[dict[str, Any]]:
     """Load watchlist tickers with latest moat/mgmt/IV analysis."""
+    from concurrent.futures import ThreadPoolExecutor
+
     try:
         cfg = get_config()
         watchlist_client = DynamoClient(cfg.table_watchlist)
         analysis_client = DynamoClient(cfg.table_analysis)
         watch_items = watchlist_client.scan_all()
         tickers = [i.get("ticker", "").strip().upper() for i in watch_items if i.get("ticker")]
-    except Exception:
+    except Exception as exc:
+        _log.warning("load_watchlist_analysis failed", extra={"error": str(exc)})
         return []
+
+    if not tickers:
+        return []
+
+    try:
+        with ThreadPoolExecutor(max_workers=min(len(tickers), 10)) as ex:
+            results = list(
+                ex.map(
+                    lambda t: analysis_client.query(
+                        Key("ticker").eq(t), scan_forward=False, limit=20
+                    ),
+                    tickers,
+                )
+            )
+        all_items = [item for ticker_items in results for item in ticker_items]
+    except Exception as exc:
+        _log.warning("load_watchlist_analysis analysis query failed", extra={"error": str(exc)})
+        return []
+
+    tickers_set = set(tickers)
+
+    by_ticker: dict[str, list] = {}
+    for item in all_items:
+        t = item.get("ticker", "").strip().upper()
+        if t in tickers_set:
+            by_ticker.setdefault(t, []).append(item)
 
     candidates = []
     for ticker in tickers:
         if not ticker:
             continue
-        try:
-            items = analysis_client.query(Key("ticker").eq(ticker), scan_forward=False, limit=20)
-        except Exception:
-            continue
+        items = by_ticker.get(ticker)
         if not items:
             continue
-        by_date: dict[str, list] = {}
-        for item in items:
-            sk = item.get("analysis_date", "")
-            date_part = sk.split("#")[0] if "#" in sk else sk
-            by_date.setdefault(date_part, []).append(item)
-        latest_date = max(by_date.keys()) if by_date else ""
-        if not latest_date:
-            continue
-        merged: dict[str, Any] = {"ticker": ticker, "sector": "Unknown"}
-        for item in by_date[latest_date]:
-            result = item.get("result") or {}
-            if isinstance(result, dict):
-                merged.update(result)
-            merged["moat_score"] = merged.get("moat_score") or item.get("moat_score")
-            merged["management_score"] = merged.get("management_score") or item.get("management_score")
-            merged["sector"] = merged.get("sector") or item.get("sector", "Unknown")
-        candidates.append(merged)
+        merged = merge_latest_analysis(items, ticker)
+        if merged:
+            candidates.append(merged)
     return candidates
 
 
@@ -102,16 +94,16 @@ def load_decisions(limit: int = 50) -> list[dict[str, Any]]:
     try:
         cfg = get_config()
         client = DynamoClient(cfg.table_decisions)
-        items = client.scan_all()
-    except Exception:
+        items = client.query(
+            Key("record_type").eq("DECISION"),
+            index_name="record_type-timestamp-index",
+            scan_forward=False,
+            limit=limit,
+        )
+    except Exception as exc:
+        _log.warning("load_decisions failed", extra={"error": str(exc)})
         return []
-    out = []
-    for item in items:
-        ts = item.get("timestamp", "")
-        if ts:
-            out.append(item)
-    out.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-    return out[:limit]
+    return items
 
 
 def load_cost_data(months: int = 12) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -120,22 +112,31 @@ def load_cost_data(months: int = 12) -> tuple[list[dict[str, Any]], dict[str, An
         tracker = CostTracker()
         from datetime import UTC, datetime
 
-        history = []
+        dt = datetime.now(UTC)
+        month_keys = []
         for i in range(months):
-            dt = datetime.now(UTC)
-            # Go back i months
             year = dt.year
             month = dt.month - i
             while month <= 0:
                 month += 12
                 year -= 1
-            month_key = f"{year}-{month:02d}"
-            spent = tracker.get_monthly_spend(month_key)
-            history.append({"month": month_key, "spent_usd": float(spent)})
-        status = tracker.check_budget()
+            month_keys.append(f"{year}-{month:02d}")
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f_history = ex.submit(tracker.get_spend_history, month_keys)
+            f_budget = ex.submit(tracker.check_budget)
+        spend_by_month = f_history.result()
+        status = f_budget.result()
+        history = [{"month": mk, "spent_usd": spend_by_month.get(mk, 0.0)} for mk in month_keys]
         return history, status
-    except Exception:
-        return [], {"budget_usd": 0, "spent_usd": 0, "remaining_usd": 0, "exhausted": False, "utilization_pct": 0}
+    except Exception as exc:
+        _log.warning("load_cost_data failed", extra={"error": str(exc)})
+        return [], {
+            "budget_usd": 0,
+            "spent_usd": 0,
+            "remaining_usd": 0,
+            "exhausted": False,
+            "utilization_pct": 0,
+        }
 
 
 def load_letter_keys() -> list[str]:
@@ -145,7 +146,8 @@ def load_letter_keys() -> list[str]:
         s3 = S3Client(bucket=cfg.s3_bucket)
         keys = s3.list_keys(prefix="letters/")
         return sorted(keys, reverse=True)
-    except Exception:
+    except Exception as exc:
+        _log.warning("load_letter_keys failed", extra={"error": str(exc)})
         return []
 
 
@@ -155,7 +157,8 @@ def load_letter_content(key: str) -> str:
         cfg = get_config()
         s3 = S3Client(bucket=cfg.s3_bucket)
         return s3.read_markdown(key)
-    except Exception:
+    except Exception as exc:
+        _log.warning("load_letter_content failed", extra={"key": key, "error": str(exc)})
         return f"*Failed to load {key}*"
 
 
@@ -166,7 +169,8 @@ def load_postmortem_keys() -> list[str]:
         s3 = S3Client(bucket=cfg.s3_bucket)
         keys = s3.list_keys(prefix="postmortems/")
         return sorted(keys, reverse=True)
-    except Exception:
+    except Exception as exc:
+        _log.warning("load_postmortem_keys failed", extra={"error": str(exc)})
         return []
 
 
@@ -176,21 +180,25 @@ def load_postmortem(key: str) -> dict[str, Any]:
         cfg = get_config()
         s3 = S3Client(bucket=cfg.s3_bucket)
         return s3.read_json(key)
-    except Exception:
+    except Exception as exc:
+        _log.warning("load_postmortem failed", extra={"key": key, "error": str(exc)})
         return {}
 
 
 def load_lessons() -> list[dict[str, Any]]:
     """Load active lessons from DynamoDB."""
     try:
-        cfg = get_config()
-        client = DynamoClient(cfg.table_lessons)
-        items = client.scan_all(filter_expression=Attr("active").eq(True))
         from datetime import UTC, datetime
 
+        cfg = get_config()
+        client = DynamoClient(cfg.table_lessons)
         now = datetime.now(UTC).isoformat()
-        return [i for i in items if (i.get("expires_at") or "") > now]
-    except Exception:
+        return client.query(
+            Key("active_flag").eq("1") & Key("expires_at").gt(now),
+            index_name="active_flag-expires_at-index",
+        )
+    except Exception as exc:
+        _log.warning("load_lessons failed", extra={"error": str(exc)})
         return []
 
 
@@ -201,5 +209,6 @@ def load_config_thresholds() -> dict[str, Any]:
         client = DynamoClient(cfg.table_config)
         item = client.get_item({"config_key": "screening_thresholds"})
         return (item.get("value") or {}) if item else {}
-    except Exception:
+    except Exception as exc:
+        _log.warning("load_config_thresholds failed", extra={"error": str(exc)})
         return {}

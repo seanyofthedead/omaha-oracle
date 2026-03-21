@@ -7,6 +7,7 @@ come from defaults; company and financial data are constructed in-memory.
 Run from project root:
   python tests\\manual\\test_quant_screen.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -300,7 +301,7 @@ COMPANIES = [
 def _print_scorecard(name: str, ticker: str, result: dict, failed: list[str], passed: bool) -> None:
     """Print detailed scorecard for one company."""
     th = DEFAULT_THRESHOLDS
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"{name} ({ticker})")
     print("=" * 60)
     print("Computed metrics:")
@@ -308,10 +309,10 @@ def _print_scorecard(name: str, ticker: str, result: dict, failed: list[str], pa
     print(f"  EPV:               {result.get('epv', 0):.2f}")
     print(f"  Graham number:     {result.get('graham_number', 0):.2f}")
     print(f"  NNWC:              {result.get('net_net_working_capital', 0):.2f}")
-    print(f"  ROIC (current):    {result.get('roic_current', 0)*100:.1f}%")
-    print(f"  ROIC (10y avg):    {result.get('roic_10y_avg', 0)*100:.1f}%")
+    print(f"  ROIC (current):    {result.get('roic_current', 0) * 100:.1f}%")
+    print(f"  ROIC (10y avg):    {result.get('roic_10y_avg', 0) * 100:.1f}%")
     print(f"  Debt/Equity:       {result.get('debt_equity', 0):.2f}")
-    print(f"  FCF yield:         {result.get('fcf_yield', 0)*100:.1f}%")
+    print(f"  FCF yield:         {result.get('fcf_yield', 0) * 100:.1f}%")
     print(f"  Piotroski score:   {result.get('piotroski_score', 0)}/9")
     print(f"  Positive FCF yrs:  {result.get('positive_fcf_years', 0)}")
     print(f"  P/E:               {result.get('pe', 0):.1f}")
@@ -327,12 +328,32 @@ def _print_scorecard(name: str, ticker: str, result: dict, failed: list[str], pa
     piot_ok = result.get("piotroski_score", 0) >= th["piotroski_min"]
     print(f"  P/E < {th['pe_max']}:        {pe:.1f}  {'PASS' if pe_ok else 'FAIL'}")
     print(f"  P/B < {th['pb_max']}:        {pb:.1f}  {'PASS' if pb_ok else 'FAIL'}")
-    print(f"  D/E < {th['debt_equity_max']}:        {result.get('debt_equity', 0):.2f}  {'PASS' if de_ok else 'FAIL'}")
-    print(f"  ROIC 10y >= {th['roic_10y_min_pct']}%:   {result.get('roic_10y_avg', 0)*100:.1f}%  {'PASS' if roic_ok else 'FAIL'}")
-    print(f"  FCF+ yrs >= {th['positive_fcf_min_years']}:     {result.get('positive_fcf_years', 0)}  {'PASS' if fcf_ok else 'FAIL'}")
-    print(f"  Piotroski >= {th['piotroski_min']}:    {result.get('piotroski_score', 0)}  {'PASS' if piot_ok else 'FAIL'}")
+    de_val = result.get("debt_equity", 0)
+    de_status = "PASS" if de_ok else "FAIL"
+    print(
+        f"  D/E < {th['debt_equity_max']}:        "
+        f"{de_val:.2f}  {de_status}"
+    )
+    roic_val = result.get("roic_10y_avg", 0) * 100
+    roic_status = "PASS" if roic_ok else "FAIL"
+    print(
+        f"  ROIC 10y >= {th['roic_10y_min_pct']}%:   "
+        f"{roic_val:.1f}%  {roic_status}"
+    )
+    fcf_val = result.get("positive_fcf_years", 0)
+    fcf_status = "PASS" if fcf_ok else "FAIL"
+    print(
+        f"  FCF+ yrs >= {th['positive_fcf_min_years']}:     "
+        f"{fcf_val}  {fcf_status}"
+    )
+    piot_val = result.get("piotroski_score", 0)
+    piot_status = "PASS" if piot_ok else "FAIL"
+    print(
+        f"  Piotroski >= {th['piotroski_min']}:    "
+        f"{piot_val}  {piot_status}"
+    )
     if result.get("owner_earnings", 0) < 0 and "Negative Earnings" in failed:
-        print(f"  Positive earnings:   N/A  FAIL (negative)")
+        print("  Positive earnings:   N/A  FAIL (negative)")
     print()
     if passed:
         print("Overall: PASSED SCREEN")
@@ -347,9 +368,7 @@ def main() -> None:
     for c in COMPANIES:
         items = c["financials"]()
         by_year = _aggregate_financials_by_year(items)
-        result, passed = _screen_company(
-            c["ticker"], c["company"], by_year, thresholds
-        )
+        result, passed = _screen_company(c["ticker"], c["company"], by_year, thresholds)
         failed = _failed_criteria(result, thresholds)
         summary.append((c["ticker"], c["name"], passed, failed))
         _print_scorecard(c["name"], c["ticker"], result, failed, passed)

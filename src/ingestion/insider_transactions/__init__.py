@@ -1,0 +1,1 @@
+"""Insider transaction data ingestion."""

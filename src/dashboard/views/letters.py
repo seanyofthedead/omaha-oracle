@@ -1,4 +1,5 @@
 """Owner's Letters page — archive with markdown rendering."""
+
 from __future__ import annotations
 
 import streamlit as st
@@ -7,6 +8,7 @@ from dashboard.data import load_letter_content, load_letter_keys
 
 
 def render() -> None:
+    """Render the Owner's Letters page."""
     st.title("Owner's Letters")
 
     keys = load_letter_keys()

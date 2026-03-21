@@ -4,14 +4,15 @@ Lambda handler for Buffett-style investment thesis generation via Claude Opus.
 Only invoked for companies passing all stages: quant + moat ≥7 + mgmt ≥6 + MoS >30%.
 Output: markdown stored to S3 at theses/{ticker}/{date}.md
 """
+
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import Any
 
 from shared.config import get_config
-from shared.dynamo_client import DynamoClient
+from shared.converters import normalize_ticker, safe_float, safe_int, today_str
+from shared.dynamo_client import store_analysis_result
 from shared.llm_client import LLMClient
 from shared.logger import get_logger
 from shared.s3_client import S3Client
@@ -20,7 +21,9 @@ _log = get_logger(__name__)
 
 THESIS_GENERATION_PROMPT = """# Investment Thesis Generation
 
-Write a Buffett-style investment thesis for {{company_name}} ({{ticker}}) in plain English. Target length: 1–2 pages. Output valid markdown only.
+Write a Buffett-style investment thesis for
+{{company_name}} ({{ticker}}) in plain English.
+Target length: 1–2 pages. Output valid markdown only.
 
 ## Input Summary
 
@@ -39,7 +42,9 @@ Write a Buffett-style investment thesis for {{company_name}} ({{ticker}}) in pla
 Write the thesis with exactly these six sections. Use `##` for section headers.
 
 ### 1. The Business
-Explain what the company does in plain English. How does it make money? Who are its customers? What is the industry structure?
+Explain what the company does in plain English. How does it
+make money? Who are its customers? What is the industry
+structure?
 
 ### 2. The Moat
 What are the specific competitive advantages? Be concrete. Reference the moat analysis findings.
@@ -48,7 +53,9 @@ What are the specific competitive advantages? Be concrete. Reference the moat an
 Owner-operator mindset, capital allocation, candor. What stands out positively or negatively?
 
 ### 4. Valuation
-Summarise the math: DCF scenarios, EPV, asset floor, composite intrinsic value, margin of safety. Show the numbers.
+Summarise the math: DCF scenarios, EPV, asset floor,
+composite intrinsic value, margin of safety. Show the
+numbers.
 
 ### 5. Kill the Thesis
 What could go wrong? What would trigger a sell? Be specific.
@@ -76,37 +83,19 @@ def _passes_all_stages(event: dict[str, Any]) -> tuple[bool, str]:
     if not quant_passed:
         return False, "quant_screen"
 
-    moat_score = _safe_int(event.get("moat_score", 0))
+    moat_score = safe_int(event.get("moat_score", 0))
     if moat_score < MOAT_MIN:
         return False, f"moat_score={moat_score}<{MOAT_MIN}"
 
-    mgmt_score = _safe_int(event.get("management_score", 0))
+    mgmt_score = safe_int(event.get("management_score", 0))
     if mgmt_score < MGMT_MIN:
         return False, f"management_score={mgmt_score}<{MGMT_MIN}"
 
-    mos = _safe_float(event.get("margin_of_safety", 0))
+    mos = safe_float(event.get("margin_of_safety", 0))
     if mos <= MOS_MIN:
         return False, f"margin_of_safety={mos:.2%}<={MOS_MIN:.0%}"
 
     return True, ""
-
-
-def _safe_float(val: Any) -> float:
-    if val is None:
-        return 0.0
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _safe_int(val: Any) -> int:
-    if val is None:
-        return 0
-    try:
-        return int(float(val))
-    except (TypeError, ValueError):
-        return 0
 
 
 def _summarise(obj: dict[str, Any] | None, max_len: int = 500) -> str:
@@ -125,7 +114,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     Output: input + thesis_s3_key, thesis_generated, skipped_reason
     """
     cfg = get_config()
-    ticker = (event.get("ticker") or "").strip().upper()
+    ticker = normalize_ticker(event)
     company_name = (event.get("company_name") or "").strip() or ticker
 
     if not ticker:
@@ -156,8 +145,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     )
     valuation_summary = _summarise(iv_result) if isinstance(iv_result, dict) else str(iv_result)
 
-    moat_score = _safe_int(event.get("moat_score", 0))
-    mgmt_score = _safe_int(event.get("management_score", 0))
+    moat_score = safe_int(event.get("moat_score", 0))
+    mgmt_score = safe_int(event.get("management_score", 0))
 
     template = THESIS_GENERATION_PROMPT
     system_prompt = template.replace("{{company_name}}", company_name)
@@ -186,16 +175,22 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:
         _log.exception("Thesis generation failed", extra={"ticker": ticker})
         result["thesis_generated"] = False
-        result["skipped_reason"] = f"error: {exc}"
-        result["error"] = str(exc)
-        return result
+        result["skipped_reason"] = "error — see CloudWatch logs for details"
+        result["error"] = type(exc).__name__
+        store_analysis_result(
+            cfg.table_analysis,
+            ticker,
+            "thesis_generator",
+            result,
+            result.get("thesis_generated", False),
+        )
+        raise
 
     thesis_md = response.get("content", "")
     if not isinstance(thesis_md, str):
         thesis_md = str(thesis_md)
 
-    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
-    s3_key = f"theses/{ticker}/{date_str}.md"
+    s3_key = f"theses/{ticker}/{today_str()}.md"
 
     s3 = S3Client()
     s3.write_markdown(s3_key, thesis_md)
@@ -205,20 +200,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     result["skipped_reason"] = ""
     result["cost_usd"] = response.get("cost_usd")
 
-    _store_result(cfg, ticker, result)
+    store_analysis_result(
+        cfg.table_analysis,
+        ticker,
+        "thesis_generator",
+        result,
+        result.get("thesis_generated", False),
+    )
     return result
-
-
-def _store_result(cfg: Any, ticker: str, result: dict[str, Any]) -> None:
-    """Store thesis generator result in analysis table."""
-    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
-    sk = f"{date_str}#thesis_generator"
-    analysis = DynamoClient(cfg.table_analysis)
-    item = {
-        "ticker": ticker,
-        "analysis_date": sk,
-        "screen_type": "thesis_generator",
-        "result": result,
-        "passed": result.get("thesis_generated", False),
-    }
-    analysis.put_item(item)

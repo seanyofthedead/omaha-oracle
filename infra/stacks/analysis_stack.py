@@ -13,6 +13,12 @@ from aws_cdk import (
     Duration,
 )
 from aws_cdk import (
+    aws_cloudwatch as cloudwatch,
+)
+from aws_cdk import (
+    aws_cloudwatch_actions as cw_actions,
+)
+from aws_cdk import (
     aws_iam as iam,
 )
 from aws_cdk import (
@@ -20,6 +26,9 @@ from aws_cdk import (
 )
 from aws_cdk import (
     aws_lambda_event_sources as lambda_events,
+)
+from aws_cdk import (
+    aws_sns as sns,
 )
 from aws_cdk import (
     aws_sqs as sqs,
@@ -31,10 +40,6 @@ from aws_cdk import (
     aws_stepfunctions_tasks as sfn_tasks,
 )
 from constructs import Construct
-
-_ACCOUNT = "292085144804"
-_REGION = "us-east-1"
-
 
 class AnalysisStack(cdk.Stack):
     """
@@ -62,8 +67,10 @@ class AnalysisStack(cdk.Stack):
 
         prefix = f"omaha-oracle-{env_name}"
         queue_url = (
-            f"https://sqs.{_REGION}.amazonaws.com/{_ACCOUNT}/{prefix}-analysis-queue"
+            f"https://sqs.{self.region}.amazonaws.com/{self.account}/{prefix}-analysis-queue"
         )
+        alert_topic_arn = f"arn:aws:sns:{self.region}:{self.account}:{prefix}-alerts"
+        alert_topic = sns.Topic.from_topic_arn(self, "AlertTopic", alert_topic_arn)
 
         shared_env = {
             "ENVIRONMENT": env_name,
@@ -78,6 +85,7 @@ class AnalysisStack(cdk.Stack):
             "TABLE_LESSONS": f"{prefix}-lessons",
             "S3_BUCKET": f"{prefix}-data",
             "ANALYSIS_QUEUE_URL": queue_url,
+            "SNS_TOPIC_ARN": alert_topic_arn,
         }
 
         # ---------------------------------------------------------------- #
@@ -103,7 +111,7 @@ class AnalysisStack(cdk.Stack):
                 "dynamodb:DeleteItem",
                 "dynamodb:BatchWriteItem",
             ],
-            resources=[f"arn:aws:dynamodb:{_REGION}:{_ACCOUNT}:table/{prefix}-*"],
+            resources=[f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*"],
         )
         s3_policy = iam.PolicyStatement(
             actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
@@ -115,9 +123,26 @@ class AnalysisStack(cdk.Stack):
         ssm_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[
-                f"arn:aws:ssm:{_REGION}:{_ACCOUNT}:parameter/omaha-oracle/{env_name}/*"
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/omaha-oracle/{env_name}/*"
             ],
         )
+
+        def _add_lambda_alarms(fn: lambda_.Function, name: str) -> None:
+            """Add error and throttle alarms routing to the alert SNS topic."""
+            for metric_fn, alarm_id, desc in [
+                (fn.metric_errors, f"{name}Errors", f"{name}: Lambda errors > 0"),
+                (fn.metric_throttles, f"{name}Throttles", f"{name}: Lambda throttled"),
+            ]:
+                alarm = cloudwatch.Alarm(
+                    self,
+                    alarm_id,
+                    metric=metric_fn(),
+                    threshold=1,
+                    evaluation_periods=1,
+                    alarm_description=desc,
+                    treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+                )
+                alarm.add_alarm_action(cw_actions.SnsAction(alert_topic))
 
         def _fn(
             construct_id: str,
@@ -131,7 +156,10 @@ class AnalysisStack(cdk.Stack):
                 construct_id,
                 function_name=f"{prefix}-{construct_id.lower().replace('fn', '').strip('-')}",
                 runtime=lambda_.Runtime.PYTHON_3_12,
-                code=lambda_.Code.from_asset("../src"),
+                code=lambda_.Code.from_asset(
+                    "../src",
+                    exclude=["dashboard", "dashboard/**", "**/__pycache__", "**/*.pyc"],
+                ),
                 handler=handler,
                 description=description,
                 memory_size=memory_size,
@@ -142,6 +170,7 @@ class AnalysisStack(cdk.Stack):
             fn.add_to_role_policy(data_policy)
             fn.add_to_role_policy(s3_policy)
             fn.add_to_role_policy(ssm_policy)
+            _add_lambda_alarms(fn, construct_id)
             return fn
 
         # ---------------------------------------------------------------- #
@@ -189,7 +218,7 @@ class AnalysisStack(cdk.Stack):
         analysis_queue = sqs.Queue.from_queue_arn(
             self,
             "AnalysisQueue",
-            f"arn:aws:sqs:{_REGION}:{_ACCOUNT}:{prefix}-analysis-queue",
+            f"arn:aws:sqs:{self.region}:{self.account}:{prefix}-analysis-queue",
         )
         self.fn_quant_screen.add_event_source(
             lambda_events.SqsEventSource(
@@ -203,6 +232,28 @@ class AnalysisStack(cdk.Stack):
         # Step Functions state machine                                      #
         # ---------------------------------------------------------------- #
 
+        # Retry config shared by all Lambda tasks (transient Lambda/SFN errors)
+        _retry_kwargs = {
+            "errors": [
+                "Lambda.ServiceException",
+                "Lambda.AWSLambdaException",
+                "Lambda.SdkClientException",
+                "Lambda.TooManyRequestsException",
+                "States.TaskFailed",
+            ],
+            "interval": Duration.seconds(2),
+            "max_attempts": 2,
+            "backoff_rate": 2,
+        }
+
+        # Fail state — surfaced when a per-company analysis Lambda raises
+        pipeline_fail = sfn.Fail(
+            self,
+            "AnalysisPipelineFailed",
+            cause="One or more analysis Lambda tasks raised an unhandled exception",
+            error="AnalysisPipelineFailed",
+        )
+
         # Step 1 — quantitative screen (output: passing_tickers, total_screened, total_passed)
         quant_step = sfn_tasks.LambdaInvoke(
             self,
@@ -211,6 +262,8 @@ class AnalysisStack(cdk.Stack):
             output_path="$.Payload",
             comment="Run quantitative filter; pass if qualifies",
         )
+        quant_step.add_retry(**_retry_kwargs)
+        quant_step.add_catch(pipeline_fail, result_path="$.error_info")
 
         # Per-company steps (each receives full item: ticker, company_name, metrics, quant_result)
         moat_step = sfn_tasks.LambdaInvoke(
@@ -221,6 +274,7 @@ class AnalysisStack(cdk.Stack):
             output_path="$.Payload",
             comment="Competitive moat assessment",
         )
+        moat_step.add_retry(**_retry_kwargs)
 
         mgmt_step = sfn_tasks.LambdaInvoke(
             self,
@@ -229,6 +283,7 @@ class AnalysisStack(cdk.Stack):
             output_path="$.Payload",
             comment="Management quality scoring",
         )
+        mgmt_step.add_retry(**_retry_kwargs)
 
         iv_step = sfn_tasks.LambdaInvoke(
             self,
@@ -237,6 +292,7 @@ class AnalysisStack(cdk.Stack):
             output_path="$.Payload",
             comment="DCF / Graham intrinsic value",
         )
+        iv_step.add_retry(**_retry_kwargs)
 
         thesis_step = sfn_tasks.LambdaInvoke(
             self,
@@ -245,6 +301,7 @@ class AnalysisStack(cdk.Stack):
             output_path="$.Payload",
             comment="Buffett-style investment thesis",
         )
+        thesis_step.add_retry(**_retry_kwargs)
 
         # Chain: moat → (if moat≥7) → mgmt → iv → (if MoS>0.30) → thesis
         moat_pass = sfn.Choice(self, "MoatPassCheck")
@@ -268,6 +325,7 @@ class AnalysisStack(cdk.Stack):
             comment="Run moat → mgmt → iv → thesis for each passing ticker",
         )
         per_company.iterator(moat_step.next(moat_pass))
+        per_company.add_catch(pipeline_fail, result_path="$.error_info")
 
         definition = quant_step.next(per_company)
 
@@ -279,6 +337,18 @@ class AnalysisStack(cdk.Stack):
             timeout=Duration.minutes(30),
             comment="Omaha Oracle end-to-end analysis pipeline",
         )
+
+        # Alert on any Step Functions execution failure
+        sfn_alarm = cloudwatch.Alarm(
+            self,
+            "AnalysisPipelineFailures",
+            metric=self.state_machine.metric_failed(),
+            threshold=1,
+            evaluation_periods=1,
+            alarm_description="Analysis pipeline Step Functions execution failed",
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        sfn_alarm.add_alarm_action(cw_actions.SnsAction(alert_topic))
 
         # ---------------------------------------------------------------- #
         # Stack outputs                                                     #

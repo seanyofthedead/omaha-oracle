@@ -1,6 +1,7 @@
 """
 Fixtures for integration tests — multi-table DynamoDB, mocked external services.
 """
+
 from __future__ import annotations
 
 import boto3
@@ -11,7 +12,6 @@ from tests.conftest import (
     TABLE_CONFIG,
     TABLE_DECISIONS,
     TABLE_LESSONS,
-    aws_env,
 )
 
 

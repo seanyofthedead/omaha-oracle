@@ -1,0 +1,25 @@
+name: Claude Code PR Review
+
+on:
+  pull_request:
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            Review this PR for bugs, security issues, and production readiness problems.
+            Pay special attention to:
+            - Hardcoded secrets or credentials
+            - Missing error handling on Alpaca, FRED, Anthropic, or AWS calls
+            - Any path where live trading could activate outside ENVIRONMENT=prod
+            - Unhandled promise rejections or empty catch blocks
+            - Missing timeouts/retries on external service calls
+            Only report real issues. Be concise.

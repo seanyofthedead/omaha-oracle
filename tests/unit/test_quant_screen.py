@@ -5,24 +5,23 @@ Unit tests for quant screen metric calculations.
 - GameStop: should fail (negative earnings, volatile)
 - Edge cases: zero equity, negative revenue, missing data
 """
+
 from __future__ import annotations
 
-import pytest
+from unittest.mock import MagicMock
 
 from analysis.quant_screen.handler import (
+    DEFAULT_THRESHOLDS,
     _aggregate_financials_by_year,
     _cv,
     _piotroski_score,
     _screen_company,
-    DEFAULT_THRESHOLDS,
 )
-
 from tests.fixtures.mock_data import (
     APPLE_COMPANY_QUANT_PASS,
-    APPLE_FINANCIALS_BY_YEAR,
     APPLE_FINANCIAL_ITEMS,
+    APPLE_FINANCIALS_BY_YEAR,
     GAMESTOP_COMPANY,
-    GAMESTOP_FINANCIALS_BY_YEAR,
     GAMESTOP_FINANCIAL_ITEMS,
     NEGATIVE_REVENUE_COMPANY,
     NEGATIVE_REVENUE_FINANCIALS,
@@ -33,6 +32,13 @@ from tests.fixtures.mock_data import (
 
 def _by_year_from_items(items: list) -> dict:
     return _aggregate_financials_by_year(items)
+
+
+def _make_fin_client(items: list) -> MagicMock:
+    """Return a mock DynamoClient whose .query() returns items."""
+    client = MagicMock()
+    client.query.return_value = items
+    return client
 
 
 class TestAggregateFinancialsByYear:
@@ -88,7 +94,7 @@ class TestScreenCompanyApple:
         result, passed = _screen_company(
             "AAPL",
             APPLE_COMPANY_QUANT_PASS,
-            APPLE_FINANCIALS_BY_YEAR,
+            _make_fin_client(APPLE_FINANCIAL_ITEMS),
             DEFAULT_THRESHOLDS,
         )
         assert passed is True
@@ -107,7 +113,7 @@ class TestScreenCompanyGameStop:
         result, passed = _screen_company(
             "GME",
             GAMESTOP_COMPANY,
-            GAMESTOP_FINANCIALS_BY_YEAR,
+            _make_fin_client(GAMESTOP_FINANCIAL_ITEMS),
             DEFAULT_THRESHOLDS,
         )
         assert passed is False
@@ -117,7 +123,7 @@ class TestScreenCompanyGameStop:
         result, _ = _screen_company(
             "GME",
             GAMESTOP_COMPANY,
-            GAMESTOP_FINANCIALS_BY_YEAR,
+            _make_fin_client(GAMESTOP_FINANCIAL_ITEMS),
             DEFAULT_THRESHOLDS,
         )
         # Either negative earnings, high volatility, or low Piotroski
@@ -137,11 +143,10 @@ class TestScreenCompanyEdgeCases:
         for year, metrics in ZERO_EQUITY_FINANCIALS.items():
             for m, v in metrics.items():
                 items.append({"period_end_date": f"{year}-12-31", "metric_name": m, "value": v})
-        by_year = _aggregate_financials_by_year(items)
         result, passed = _screen_company(
             "ZERO",
             ZERO_EQUITY_COMPANY,
-            by_year,
+            _make_fin_client(items),
             DEFAULT_THRESHOLDS,
         )
         assert passed is False
@@ -152,11 +157,10 @@ class TestScreenCompanyEdgeCases:
         for year, metrics in NEGATIVE_REVENUE_FINANCIALS.items():
             for m, v in metrics.items():
                 items.append({"period_end_date": f"{year}-12-31", "metric_name": m, "value": v})
-        by_year = _aggregate_financials_by_year(items)
         result, passed = _screen_company(
             "NEG",
             NEGATIVE_REVENUE_COMPANY,
-            by_year,
+            _make_fin_client(items),
             DEFAULT_THRESHOLDS,
         )
         assert passed is False
@@ -165,7 +169,7 @@ class TestScreenCompanyEdgeCases:
         result, passed = _screen_company(
             "MISSING",
             {"ticker": "MISSING", "trailingPE": 10, "marketCap": 1e9},
-            {},
+            _make_fin_client([]),
             DEFAULT_THRESHOLDS,
         )
         assert passed is False

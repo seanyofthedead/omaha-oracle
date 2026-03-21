@@ -1,4 +1,5 @@
 """Cost Tracker page — monthly spend and budget."""
+
 from __future__ import annotations
 
 import streamlit as st
@@ -7,6 +8,7 @@ from dashboard.data import load_cost_data
 
 
 def render() -> None:
+    """Render the Cost Tracker page."""
     st.title("Cost Tracker")
 
     months = st.sidebar.slider("Months to show", 3, 24, 12)

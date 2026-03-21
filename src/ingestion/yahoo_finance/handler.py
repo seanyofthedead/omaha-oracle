@@ -5,15 +5,18 @@ Event types:
   - {"action": "batch_prices"}           — refresh prices for all watchlist companies
   - {"action": "full_refresh", "ticker": "AAPL"} — refresh one company + 10y weekly history
 """
+
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any
 
 import yfinance as yf
 
 from shared.config import get_config
-from shared.dynamo_client import DynamoClient
+from shared.converters import check_failure_threshold
+from shared.dynamo_client import DynamoClient, get_watchlist_tickers
 from shared.logger import get_logger
 from shared.s3_client import S3Client
 
@@ -37,12 +40,6 @@ _INFO_KEYS = [
     "fiftyTwoWeekLow",
     "beta",
 ]
-
-
-def _get_watchlist_tickers(dynamo: DynamoClient) -> list[str]:
-    """Return tickers from the watchlist table."""
-    items = dynamo.scan_all(projection_expression="ticker")
-    return [i["ticker"] for i in items if i.get("ticker")]
 
 
 def _info_to_item(ticker: str, info: dict[str, Any], updated_at: str) -> dict[str, Any]:
@@ -82,16 +79,16 @@ def _fetch_weekly_history(ticker: str) -> list[dict[str, Any]]:
         return []
     records: list[dict[str, Any]] = []
     for idx, row in df.iterrows():
-        records.append({
-            "date": idx.strftime("%Y-%m-%d")
-            if hasattr(idx, "strftime")
-            else str(idx),
-            "open": float(row["Open"]) if "Open" in row else None,
-            "high": float(row["High"]) if "High" in row else None,
-            "low": float(row["Low"]) if "Low" in row else None,
-            "close": float(row["Close"]) if "Close" in row else None,
-            "volume": int(row["Volume"]) if "Volume" in row else None,
-        })
+        records.append(
+            {
+                "date": idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx),
+                "open": float(row["Open"]) if "Open" in row else None,
+                "high": float(row["High"]) if "High" in row else None,
+                "low": float(row["Low"]) if "Low" in row else None,
+                "close": float(row["Close"]) if "Close" in row else None,
+                "volume": int(row["Volume"]) if "Volume" in row else None,
+            }
+        )
     return records
 
 
@@ -140,7 +137,6 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     cfg = get_config()
     companies = DynamoClient(cfg.table_companies)
-    watchlist = DynamoClient(cfg.table_watchlist)
     s3 = S3Client()
     updated_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -154,17 +150,32 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     errors: list[str] = []
 
     if action == "batch_prices":
-        tickers = _get_watchlist_tickers(watchlist)
+        tickers = get_watchlist_tickers(cfg.table_watchlist)
         if not tickers:
             _log.warning("Watchlist empty — nothing to process")
             return {"status": "ok", "processed": 0, "message": "watchlist empty"}
-        for t in tickers:
-            try:
-                if _process_ticker(t, companies, s3, include_history=False, updated_at=updated_at):
+
+        def _fetch_one(t: str) -> bool:
+            return _process_ticker(t, companies, s3, include_history=False, updated_at=updated_at)
+
+        with ThreadPoolExecutor(max_workers=10) as ex:
+            futures = {ex.submit(_fetch_one, t): t for t in tickers}
+            for fut in as_completed(futures):
+                t = futures[fut]
+                exc = fut.exception()
+                if exc:
+                    errors.append(f"{t}: {exc}")
+                    _log.exception(
+                        "Ingestion failed",
+                        extra={
+                            "ticker": t,
+                            "stage": "batch_prices",
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+                elif fut.result():
                     processed += 1
-            except Exception as exc:
-                errors.append(f"{t}: {exc}")
-                _log.exception("Failed to process ticker", extra={"ticker": t})
+        check_failure_threshold(errors, len(tickers), "Yahoo Finance batch_prices")
 
     elif action == "full_refresh":
         try:
@@ -173,8 +184,18 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             ):
                 processed = 1
         except Exception as exc:
-            _log.exception("Full refresh failed", extra={"ticker": ticker_arg})
-            return {"status": "error", "message": str(exc)}
+            _log.exception(
+                "Ingestion failed",
+                extra={
+                    "ticker": ticker_arg,
+                    "stage": "full_refresh",
+                    "error_type": type(exc).__name__,
+                },
+            )
+            return {
+                "status": "error",
+                "message": "Data fetch failed — see CloudWatch logs for details",
+            }
 
     else:
         return {"status": "error", "message": f"unknown action: {action}"}

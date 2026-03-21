@@ -4,127 +4,43 @@ Lambda handler for portfolio execution via Alpaca.
 Processes pending decisions from allocation step. LIMIT ORDERS ONLY.
 Paper trading by default; refuses live unless ENVIRONMENT=prod.
 """
+
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-import requests
-
 from shared.config import get_config
+from shared.converters import today_str
 from shared.dynamo_client import DynamoClient
 from shared.logger import get_logger
+
+from .alpaca_client import AlpacaClient
 
 _log = get_logger(__name__)
 
 TRANCHE_THRESHOLD_USD = 10_000.0
+
+
+def _check_trading_enabled(config_client: DynamoClient) -> None:
+    """
+    Raise RuntimeError if the kill switch has been flipped.
+
+    Flip via:
+        aws dynamodb put-item --table-name omaha-oracle-prod-config \
+          --item '{"pk":{"S":"config"},"sk":{"S":"trading_enabled"},"value":{"BOOL":false}}'
+    """
+    item = config_client.get_item({"pk": "config", "sk": "trading_enabled"})
+    if item is not None and item.get("value") is False:
+        raise RuntimeError(
+            "Trading is disabled via kill switch (config.trading_enabled=false). "
+            "Set value to true to resume."
+        )
+
+
 MIN_TRANCHES = 3
 MAX_TRANCHES = 5
-
-
-def _data_url_from_base(base_url: str) -> str:
-    """Derive market data API URL from trading API base URL."""
-    if "paper-api" in base_url:
-        return "https://data.sandbox.alpaca.markets"
-    return "https://data.alpaca.markets"
-
-
-class AlpacaClient:
-    """
-    Alpaca REST API client using requests (no alpaca-py SDK).
-
-    Paper trading by default via base_url from config.
-    """
-
-    def __init__(self, base_url: str | None = None) -> None:
-        cfg = get_config()
-        self._base_url = (base_url or cfg.alpaca_base_url).rstrip("/")
-        self._data_url = _data_url_from_base(self._base_url).rstrip("/")
-        self._api_key, self._secret_key = cfg.get_alpaca_keys()
-        self._headers = {
-            "APCA-API-KEY-ID": self._api_key,
-            "APCA-API-SECRET-KEY": self._secret_key,
-            "Content-Type": "application/json",
-        }
-
-    def get_account(self) -> dict[str, Any]:
-        """Return account info and buying power."""
-        resp = requests.get(
-            f"{self._base_url}/v2/account",
-            headers=self._headers,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-    def submit_order(
-        self,
-        ticker: str,
-        qty: float,
-        side: str,
-        order_type: str = "limit",
-        limit_price: float | None = None,
-        time_in_force: str = "day",
-    ) -> dict[str, Any]:
-        """
-        Submit a limit order. LIMIT ORDERS ONLY.
-
-        Parameters
-        ----------
-        ticker : str
-            Symbol (e.g. AAPL).
-        qty : float
-            Number of shares.
-        side : str
-            "buy" or "sell".
-        order_type : str
-            Must be "limit".
-        limit_price : float
-            Required for limit orders.
-        time_in_force : str
-            "day", "gtc", etc. Default "day".
-        """
-        if order_type != "limit" or limit_price is None:
-            raise ValueError("Only limit orders supported; limit_price required")
-
-        qty_str = str(int(qty)) if qty == int(qty) else f"{qty:.4f}"
-        payload = {
-            "symbol": ticker.upper(),
-            "qty": qty_str,
-            "side": side.lower(),
-            "type": "limit",
-            "limit_price": str(round(limit_price, 2)),
-            "time_in_force": time_in_force,
-        }
-        resp = requests.post(
-            f"{self._base_url}/v2/orders",
-            headers=self._headers,
-            json=payload,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-    def get_positions(self) -> list[dict[str, Any]]:
-        """Return current positions."""
-        resp = requests.get(
-            f"{self._base_url}/v2/positions",
-            headers=self._headers,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-    def get_quote(self, ticker: str) -> dict[str, Any]:
-        """Return latest quote (bid/ask) from market data API."""
-        resp = requests.get(
-            f"{self._data_url}/v2/stocks/{ticker.upper()}/quotes/latest",
-            headers=self._headers,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json()
 
 
 def _split_tranches(total_qty: float, total_usd: float) -> list[float]:
@@ -148,6 +64,67 @@ def _split_tranches(total_qty: float, total_usd: float) -> list[float]:
     return [t for t in tranches if t > 0]
 
 
+def _alert_trade_failure(
+    topic_arn: str,
+    region: str,
+    ticker: str,
+    side: str,
+    error: str,
+) -> None:
+    """Publish an SNS alert when a trade execution fails."""
+    if not topic_arn:
+        return
+    from monitoring.alerts.handler import _publish  # avoid circular import at module level
+
+    _publish(
+        topic_arn=topic_arn,
+        subject=f"Omaha Oracle — Trade Failure: {ticker}",
+        message=(f"Failed to execute {side.upper()} order for {ticker}.\nError: {error}"),
+        region=region,
+    )
+
+
+def _sync_portfolio_state(alpaca: AlpacaClient, portfolio_table: str) -> None:
+    """Sync Alpaca positions and account balance back to DynamoDB portfolio table."""
+    portfolio_client = DynamoClient(portfolio_table)
+    now = datetime.now(UTC).isoformat()
+
+    try:
+        account = alpaca.get_account()
+        portfolio_client.put_item(
+            {
+                "pk": "ACCOUNT",
+                "sk": "SUMMARY",
+                "portfolio_value": float(account.get("portfolio_value") or 0),
+                "cash_available": float(account.get("cash") or 0),
+                "last_synced": now,
+            }
+        )
+    except Exception as exc:
+        _log.error("Portfolio account sync failed", extra={"error": str(exc)})
+
+    try:
+        positions = alpaca.get_positions()
+        for pos in positions:
+            symbol = (pos.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            portfolio_client.put_item(
+                {
+                    "pk": "POSITION",
+                    "sk": symbol,
+                    "ticker": symbol,
+                    "shares": float(pos.get("qty") or 0),
+                    "market_value": float(pos.get("market_value") or 0),
+                    "cost_basis": float(pos.get("cost_basis") or 0),
+                    "sector": pos.get("asset_class", "equity"),
+                    "last_synced": now,
+                }
+            )
+    except Exception as exc:
+        _log.error("Portfolio positions sync failed", extra={"error": str(exc)})
+
+
 def _log_order_decision(
     decisions_client: DynamoClient,
     ticker: str,
@@ -161,6 +138,7 @@ def _log_order_decision(
         "decision_id": decision_id,
         "timestamp": timestamp,
         "decision_type": "ORDER",
+        "record_type": "DECISION",
         "ticker": ticker,
         "side": side,
         "payload": payload,
@@ -190,10 +168,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             return {
                 "orders_submitted": [],
                 "orders_refused": 0,
-                "errors": [
-                    "Live trading refused: ENVIRONMENT must be prod for api.alpaca.markets"
-                ],
+                "errors": ["Live trading refused: ENVIRONMENT must be prod for api.alpaca.markets"],
             }
+
+    config_client = DynamoClient(cfg.table_config)
+    _check_trading_enabled(config_client)
 
     decisions_client = DynamoClient(cfg.table_decisions)
     client = AlpacaClient()
@@ -225,16 +204,40 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             errors.append(f"{ticker}: no position_size_usd")
             continue
 
+        # Idempotency: write a dedup sentinel before submitting to Alpaca.
+        # If the sentinel already exists this is a Lambda retry — skip to avoid double order.
+        dedup_key = f"DEDUP#{ticker}#buy#{today_str()}"
+        already_submitted = not decisions_client.put_item_if_not_exists(
+            {
+                "pk": dedup_key,
+                "sk": "DEDUP",
+                "ticker": ticker,
+                "side": "buy",
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
+        if already_submitted:
+            _log.warning(
+                "Duplicate BUY attempt skipped (idempotency)",
+                extra={"ticker": ticker, "dedup_key": dedup_key},
+            )
+            continue
+
         try:
             quote = client.get_quote(ticker)
         except Exception as e:
-            errors.append(f"{ticker}: quote failed — {e}")
+            err = f"{ticker}: quote failed — {e}"
+            _log.error("BUY quote fetch failed", extra={"ticker": ticker, "error": str(e)})
+            errors.append(err)
+            _alert_trade_failure(cfg.sns_topic_arn, cfg.aws_region, ticker, "buy", str(e))
             continue
 
         quote_obj = quote.get("quote") or {}
         ask = float(quote_obj.get("ap", 0) or 0)
         if ask <= 0:
-            errors.append(f"{ticker}: no ask price")
+            err = f"{ticker}: no ask price"
+            errors.append(err)
+            _alert_trade_failure(cfg.sns_topic_arn, cfg.aws_region, ticker, "buy", err)
             continue
 
         total_qty = position_usd / ask
@@ -266,7 +269,13 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     },
                 )
             except Exception as e:
-                errors.append(f"{ticker} tranche {i+1}: {e}")
+                err = f"{ticker} tranche {i + 1}: {e}"
+                _log.error(
+                    "BUY order submit failed",
+                    extra={"ticker": ticker, "tranche": i + 1, "error": str(e)},
+                )
+                errors.append(err)
+                _alert_trade_failure(cfg.sns_topic_arn, cfg.aws_region, ticker, "buy", str(e))
 
     # Process SELL decisions
     for dec in sell_decisions:
@@ -276,11 +285,32 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if not ticker:
             continue
 
+        # Idempotency guard for SELL too
+        dedup_key = f"DEDUP#{ticker}#sell#{today_str()}"
+        already_submitted = not decisions_client.put_item_if_not_exists(
+            {
+                "pk": dedup_key,
+                "sk": "DEDUP",
+                "ticker": ticker,
+                "side": "sell",
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
+        if already_submitted:
+            _log.warning(
+                "Duplicate SELL attempt skipped (idempotency)",
+                extra={"ticker": ticker, "dedup_key": dedup_key},
+            )
+            continue
+
         try:
             positions = client.get_positions()
             pos = next((p for p in positions if (p.get("symbol") or "").upper() == ticker), None)
         except Exception as e:
-            errors.append(f"{ticker}: get_positions failed — {e}")
+            err = f"{ticker}: get_positions failed — {e}"
+            _log.error("SELL positions fetch failed", extra={"ticker": ticker, "error": str(e)})
+            errors.append(err)
+            _alert_trade_failure(cfg.sns_topic_arn, cfg.aws_region, ticker, "sell", str(e))
             continue
 
         if not pos:
@@ -296,13 +326,18 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         try:
             quote = client.get_quote(ticker)
         except Exception as e:
-            errors.append(f"{ticker}: quote failed — {e}")
+            err = f"{ticker}: quote failed — {e}"
+            _log.error("SELL quote fetch failed", extra={"ticker": ticker, "error": str(e)})
+            errors.append(err)
+            _alert_trade_failure(cfg.sns_topic_arn, cfg.aws_region, ticker, "sell", str(e))
             continue
 
         quote_obj = quote.get("quote") or {}
         bid = float(quote_obj.get("bp", 0) or 0)
         if bid <= 0:
-            errors.append(f"{ticker}: no bid price")
+            err = f"{ticker}: no bid price"
+            errors.append(err)
+            _alert_trade_failure(cfg.sns_topic_arn, cfg.aws_region, ticker, "sell", err)
             continue
 
         try:
@@ -326,7 +361,25 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 },
             )
         except Exception as e:
-            errors.append(f"{ticker} sell: {e}")
+            err = f"{ticker} sell: {e}"
+            _log.error("SELL order submit failed", extra={"ticker": ticker, "error": str(e)})
+            errors.append(err)
+            _alert_trade_failure(cfg.sns_topic_arn, cfg.aws_region, ticker, "sell", str(e))
+
+    # Always sync portfolio state from Alpaca so the next allocation run sees fresh data
+    _sync_portfolio_state(client, cfg.table_portfolio)
+
+    total_decisions = len(buy_decisions) + len(sell_decisions)
+    if errors and not orders_submitted and total_decisions > 0:
+        raise RuntimeError(
+            f"Execution failed entirely — 0 orders placed, {len(errors)} errors: {errors}"
+        )
+
+    if errors and orders_submitted:
+        _log.error(
+            "Partial execution failure",
+            extra={"orders_placed": len(orders_submitted), "errors": errors},
+        )
 
     return {
         "orders_submitted": orders_submitted,

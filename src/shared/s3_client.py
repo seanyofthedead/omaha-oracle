@@ -12,10 +12,13 @@ import json
 from typing import Any
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 
 from shared.config import get_config
 from shared.logger import get_logger
+
+_S3_CONFIG = BotocoreConfig(retries={"mode": "adaptive", "max_attempts": 5})
 
 _log = get_logger(__name__)
 
@@ -32,9 +35,10 @@ class S3Client:
     """
 
     def __init__(self, bucket: str | None = None) -> None:
+        """Initialize the client, defaulting to the configured S3 bucket."""
         cfg = get_config()
         self._bucket = bucket or cfg.s3_bucket
-        self._client = boto3.client("s3", region_name=cfg.aws_region)
+        self._client = boto3.client("s3", region_name=cfg.aws_region, config=_S3_CONFIG)
 
     # ------------------------------------------------------------------ #
     # JSON                                                                 #
@@ -172,6 +176,57 @@ class S3Client:
     # ------------------------------------------------------------------ #
     # Listing                                                              #
     # ------------------------------------------------------------------ #
+
+    def get_filing_context(self, ticker: str) -> tuple[str, bool]:
+        """
+        Fetch recent SEC filing metadata from S3 for LLM prompt context.
+
+        Reads the most recent ``filings.json`` stored under
+        ``raw/sec/{ticker}/`` and returns a formatted list of the ten most
+        recent filings.
+
+        Replaces the identical ``_get_filing_context`` private function that
+        was duplicated in the moat_analysis and management_quality handlers.
+
+        Parameters
+        ----------
+        ticker:
+            Stock ticker symbol (uppercase).
+
+        Returns
+        -------
+        tuple[str, bool]
+            ``(context_text, degraded)`` where ``degraded=True`` means an S3
+            read error occurred and the context is a placeholder.
+        """
+        prefix = f"raw/sec/{ticker}/"
+        keys = self.list_keys(prefix=prefix)
+        if not keys:
+            return "No SEC filing data available in S3.", False
+        date_keys = [k for k in keys if k.endswith("/filings.json")]
+        if not date_keys:
+            return "No filings.json found in S3.", False
+        latest = sorted(date_keys)[-1]
+        try:
+            data = self.read_json(latest)
+        except Exception as exc:
+            _log.error(
+                "Failed to read filings — LLM will run on degraded context",
+                extra={"key": latest, "error": str(exc)},
+            )
+            return "Could not load filing metadata.", True
+        recent = data.get("filings", {}).get("recent", {})
+        forms = recent.get("form", []) or []
+        dates = recent.get("filingDate", []) or []
+        accns = recent.get("accessionNumber", []) or []
+        lines: list[str] = []
+        for i in range(min(10, len(forms))):
+            f = forms[i] if i < len(forms) else ""
+            d = dates[i] if i < len(dates) else ""
+            a = accns[i] if i < len(accns) else ""
+            lines.append(f"  - {f} ({d}) {a}")
+        context = "Recent filings:\n" + "\n".join(lines) if lines else "No recent filings."
+        return context, False
 
     def list_keys(self, prefix: str = "") -> list[str]:
         """

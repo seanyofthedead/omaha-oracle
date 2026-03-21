@@ -14,6 +14,12 @@ from aws_cdk import (
     Duration,
 )
 from aws_cdk import (
+    aws_cloudwatch as cloudwatch,
+)
+from aws_cdk import (
+    aws_cloudwatch_actions as cw_actions,
+)
+from aws_cdk import (
     aws_events as events,
 )
 from aws_cdk import (
@@ -32,10 +38,6 @@ from aws_cdk import (
     aws_sns_subscriptions as sns_subscriptions,
 )
 from constructs import Construct
-
-_ACCOUNT = "292085144804"
-_REGION = "us-east-1"
-
 
 class MonitoringStack(cdk.Stack):
     """
@@ -74,7 +76,7 @@ class MonitoringStack(cdk.Stack):
             "TABLE_LESSONS": f"{prefix}-lessons",
             "S3_BUCKET": f"{prefix}-data",
             "ANALYSIS_QUEUE_URL": (
-                f"https://sqs.{_REGION}.amazonaws.com/{_ACCOUNT}/{prefix}-analysis-queue"
+                f"https://sqs.{self.region}.amazonaws.com/{self.account}/{prefix}-analysis-queue"
             ),
         }
 
@@ -121,7 +123,7 @@ class MonitoringStack(cdk.Stack):
                 "dynamodb:DeleteItem",
                 "dynamodb:BatchWriteItem",
             ],
-            resources=[f"arn:aws:dynamodb:{_REGION}:{_ACCOUNT}:table/{prefix}-*"],
+            resources=[f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*"],
         )
         s3_policy = iam.PolicyStatement(
             actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
@@ -133,7 +135,7 @@ class MonitoringStack(cdk.Stack):
         ssm_policy = iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[
-                f"arn:aws:ssm:{_REGION}:{_ACCOUNT}:parameter/omaha-oracle/{env_name}/*"
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/omaha-oracle/{env_name}/*"
             ],
         )
 
@@ -141,6 +143,23 @@ class MonitoringStack(cdk.Stack):
             **shared_env,
             "SNS_TOPIC_ARN": self.alert_topic.topic_arn,
         }
+
+        def _add_lambda_alarms(fn: lambda_.Function, name: str) -> None:
+            """Add error and throttle alarms routing to the alert SNS topic."""
+            for metric_fn, alarm_id, desc in [
+                (fn.metric_errors, f"{name}Errors", f"{name}: Lambda errors > 0"),
+                (fn.metric_throttles, f"{name}Throttles", f"{name}: Lambda throttled"),
+            ]:
+                alarm = cloudwatch.Alarm(
+                    self,
+                    alarm_id,
+                    metric=metric_fn(),
+                    threshold=1,
+                    evaluation_periods=1,
+                    alarm_description=desc,
+                    treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+                )
+                alarm.add_alarm_action(cw_actions.SnsAction(self.alert_topic))
 
         def _fn(
             construct_id: str,
@@ -154,7 +173,10 @@ class MonitoringStack(cdk.Stack):
                 construct_id,
                 function_name=f"{prefix}-{construct_id.lower().replace('fn', '').strip('-')}",
                 runtime=lambda_.Runtime.PYTHON_3_12,
-                code=lambda_.Code.from_asset("../src"),
+                code=lambda_.Code.from_asset(
+                    "../src",
+                    exclude=["dashboard", "dashboard/**", "**/__pycache__", "**/*.pyc"],
+                ),
                 handler=handler,
                 description=description,
                 memory_size=memory_size,
@@ -165,6 +187,7 @@ class MonitoringStack(cdk.Stack):
             fn.add_to_role_policy(data_policy)
             fn.add_to_role_policy(s3_policy)
             fn.add_to_role_policy(ssm_policy)
+            _add_lambda_alarms(fn, construct_id)
             return fn
 
         # ---------------------------------------------------------------- #
@@ -230,9 +253,16 @@ class MonitoringStack(cdk.Stack):
         )
         self.alert_topic.grant_publish(self.fn_alerts)
 
-        # Allow all other Lambdas in the account to invoke alerts
-        self.fn_alerts.grant_invoke(
-            iam.ServicePrincipal("lambda.amazonaws.com")
+        # Allow only the monitoring Lambdas in this stack to invoke alerts
+        self.fn_alerts.add_permission(
+            "AllowCostMonitorInvoke",
+            principal=iam.ServicePrincipal("lambda.amazonaws.com"),
+            source_arn=self.fn_cost_monitor.function_arn,
+        )
+        self.fn_alerts.add_permission(
+            "AllowOwnersLetterInvoke",
+            principal=iam.ServicePrincipal("lambda.amazonaws.com"),
+            source_arn=self.fn_owners_letter.function_arn,
         )
 
         # ---------------------------------------------------------------- #

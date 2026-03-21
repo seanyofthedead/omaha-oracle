@@ -1,4 +1,5 @@
 """Feedback Loop page — lessons, calibration, threshold history."""
+
 from __future__ import annotations
 
 import streamlit as st
@@ -12,6 +13,7 @@ from dashboard.data import (
 
 
 def render() -> None:
+    """Render the Feedback Loop page."""
     st.title("Feedback Loop")
 
     # Active lessons
@@ -19,30 +21,41 @@ def render() -> None:
     lessons = load_lessons()
     if lessons:
         rows = []
-        for l in lessons:
-            rows.append({
-                "Type": l.get("lesson_type", ""),
-                "ID": l.get("lesson_id", ""),
-                "Severity": l.get("severity", ""),
-                "Ticker": l.get("ticker", "") or "—",
-                "Sector": l.get("sector", "ALL"),
-                "Expires": (l.get("expires_at") or "")[:10],
-                "Text": (l.get("prompt_injection_text") or l.get("description", ""))[:60] + "...",
-            })
+        for lesson in lessons:
+            rows.append(
+                {
+                    "Type": lesson.get("lesson_type", ""),
+                    "ID": lesson.get("lesson_id", ""),
+                    "Severity": lesson.get("severity", ""),
+                    "Ticker": lesson.get("ticker", "") or "—",
+                    "Sector": lesson.get("sector", "ALL"),
+                    "Expires": (lesson.get("expires_at") or "")[:10],
+                    "Text": (lesson.get("prompt_injection_text") or lesson.get("description", ""))[
+                        :60
+                    ]
+                    + "...",
+                }
+            )
         st.dataframe(rows, use_container_width=True, hide_index=True)
     else:
         st.info("No active lessons.")
 
     # Confidence calibration
     st.subheader("Confidence Calibration (by stage)")
-    conf_lessons = [l for l in lessons if l.get("lesson_type") == "confidence_calibration"]
+    conf_lessons = [
+        lesson for lesson in lessons if lesson.get("lesson_type") == "confidence_calibration"
+    ]
     if conf_lessons:
-        for l in conf_lessons:
-            cal = l.get("confidence_calibration") or {}
-            stage = cal.get("analysis_stage", "")
-            sector = cal.get("sector", "ALL")
-            factor = cal.get("adjustment_factor", "")
-            st.markdown(f"- **{stage}** / {sector}: `{factor}`")
+        rows = [
+            {
+                "Stage": cal.get("analysis_stage", ""),
+                "Sector": cal.get("sector", "ALL"),
+                "Factor": cal.get("adjustment_factor", ""),
+            }
+            for lesson in conf_lessons
+            if (cal := lesson.get("confidence_calibration") or {})
+        ]
+        st.dataframe(rows, use_container_width=True, hide_index=True)
     else:
         st.info("No confidence calibration lessons.")
 
@@ -58,11 +71,16 @@ def render() -> None:
     st.subheader("Mistake Rate Trend")
     keys = load_postmortem_keys()
     if keys:
+        from concurrent.futures import ThreadPoolExecutor
+
         import pandas as pd
 
+        batch = keys[:12]
+        with ThreadPoolExecutor(max_workers=len(batch)) as ex:
+            postmortems = list(ex.map(load_postmortem, batch))
+
         rates = []
-        for k in keys[:12]:
-            pm = load_postmortem(k)
+        for pm, k in zip(postmortems, batch):
             summary = pm.get("audit_summary") or {}
             q = pm.get("quarter", k)
             mr = summary.get("mistake_rate", 0)

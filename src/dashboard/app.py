@@ -10,6 +10,7 @@ Run locally:
 
 For Lambda deployment, use a container (Streamlit is not ASGI/Mangum-compatible).
 """
+
 from __future__ import annotations
 
 import sys
@@ -19,28 +20,50 @@ from pathlib import Path
 if str(Path(__file__).resolve().parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import importlib
+
 import streamlit as st
 
-from dashboard.pages import (
-    cost_tracker,
-    feedback_loop,
-    letters,
-    portfolio,
-    signals,
-    watchlist,
-)
-
-PAGES = {
-    "Portfolio Overview": portfolio,
-    "Watchlist": watchlist,
-    "Signals": signals,
-    "Cost Tracker": cost_tracker,
-    "Owner's Letters": letters,
-    "Feedback Loop": feedback_loop,
+_PAGE_MODULES = {
+    "Portfolio Overview": "dashboard.views.portfolio",
+    "Watchlist": "dashboard.views.watchlist",
+    "Signals": "dashboard.views.signals",
+    "Cost Tracker": "dashboard.views.cost_tracker",
+    "Owner's Letters": "dashboard.views.letters",
+    "Feedback Loop": "dashboard.views.feedback_loop",
 }
 
 
+def _require_auth() -> None:
+    """
+    Block access until the user provides the correct dashboard password.
+
+    Password is stored in .streamlit/secrets.toml:
+        dashboard_password = "your-password-here"
+
+    Session persists until the browser tab is closed or Streamlit restarts.
+    """
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if not st.session_state.authenticated:
+        st.set_page_config(page_title="Omaha Oracle — Login", page_icon="🔒")
+        st.title("🔒 Omaha Oracle")
+        st.markdown("Enter the dashboard password to continue.")
+        pwd = st.text_input("Password", type="password", key="login_pwd")
+        if st.button("Login"):
+            expected = st.secrets.get("dashboard_password", "")
+            if expected and pwd == expected:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+        st.stop()
+
+
 def main() -> None:
+    """Configure the Streamlit app and render the selected page."""
+    _require_auth()
     st.set_page_config(
         page_title="Omaha Oracle",
         page_icon="📊",
@@ -50,8 +73,8 @@ def main() -> None:
     st.sidebar.title("Omaha Oracle")
     st.sidebar.markdown("*Monitoring dashboard*")
 
-    selection = st.sidebar.radio("Page", list(PAGES.keys()))
-    page = PAGES[selection]
+    selection = st.sidebar.radio("Page", list(_PAGE_MODULES.keys()))
+    page = importlib.import_module(_PAGE_MODULES[selection])
     page.render()
 
 
