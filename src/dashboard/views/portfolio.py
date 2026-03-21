@@ -188,7 +188,6 @@ def render() -> None:
             from dashboard.charts import (
                 ACCENT_BLUE,
                 MUTED_GRAY,
-                apply_theme,
             )
 
             # Sort ascending for horizontal bar (largest at top)
@@ -236,7 +235,6 @@ def render() -> None:
                         xaxis_ticksuffix="%",
                         showlegend=False,
                     )
-                    apply_theme(fig)
                     st.plotly_chart(
                         fig, use_container_width=True
                     )

@@ -323,8 +323,10 @@ class DataStack(cdk.Stack):
                 timeout=timeout,
                 environment=shared_env,
                 layers=[self._deps_layer],
-                # Limit concurrency to avoid triggering rate limits on SEC EDGAR / Yahoo Finance
-                reserved_concurrent_executions=3,
+                # Limit concurrency to avoid triggering rate limits on SEC EDGAR / Yahoo Finance.
+                # Keep at 1 so total reserved across all Lambdas stays well under the
+                # account-wide unreserved-concurrency minimum of 10.
+                reserved_concurrent_executions=1,
             )
             fn.add_to_role_policy(dynamodb_policy)
             fn.add_to_role_policy(s3_policy)

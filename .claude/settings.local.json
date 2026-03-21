@@ -14,7 +14,8 @@
       "Bash(pip audit:*)",
       "Bash(pip-audit:*)",
       "Bash(ruff format:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

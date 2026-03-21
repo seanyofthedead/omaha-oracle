@@ -16,6 +16,7 @@ dependencies = [
 dashboard = [
     "streamlit>=1.37.0",
     "pandas>=2.0",
+    "plotly>=5.18",
 ]
 dev = [
     "pytest>=8.0",

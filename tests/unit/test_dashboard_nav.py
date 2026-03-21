@@ -163,11 +163,15 @@ class TestBugRegression:
       - app.py still calls st.sidebar.radio() →  one working menu
     """
 
-    def test_entrypoint_calls_sidebar_radio(self):
-        """app.py must contain a sidebar.radio call — the working manual nav."""
-        app_source = (DASHBOARD_DIR / "app.py").read_text()
-        assert "st.sidebar.radio" in app_source, (
-            "app.py no longer contains st.sidebar.radio. "
+    def test_sidebar_contains_radio_nav(self):
+        """The sidebar module must contain a sidebar.radio call — the working manual nav.
+
+        The radio was originally in app.py but was extracted to sidebar.py
+        as part of the shared ``render_sidebar()`` function.
+        """
+        sidebar_source = (DASHBOARD_DIR / "sidebar.py").read_text()
+        assert "st.sidebar.radio" in sidebar_source, (
+            "sidebar.py no longer contains st.sidebar.radio. "
             "If the manual nav was removed without adding native multi-page nav, "
             "the sidebar will be empty."
         )

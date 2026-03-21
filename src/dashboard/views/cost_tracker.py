@@ -111,7 +111,6 @@ def render() -> None:
             from dashboard.charts import (
                 ACCENT_BLUE,
                 MUTED_GRAY,
-                apply_theme,
             )
 
             df = pd.DataFrame(history)
@@ -146,7 +145,6 @@ def render() -> None:
                     yaxis_tickformat=",.0f",
                     showlegend=False,
                 )
-                apply_theme(fig)
                 st.plotly_chart(fig, use_container_width=True)
                 st.caption(
                     "Dashed line shows the monthly budget. "

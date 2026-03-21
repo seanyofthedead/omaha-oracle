@@ -205,7 +205,6 @@ def render() -> None:
                 from dashboard.charts import (
                     ACCENT_RED,
                     MUTED_GRAY,
-                    apply_theme,
                 )
 
                 with st.container(border=True):
@@ -246,7 +245,6 @@ def render() -> None:
                         yaxis_tickformat=".0%",
                         showlegend=False,
                     )
-                    apply_theme(fig)
                     st.plotly_chart(
                         fig, use_container_width=True
                     )
