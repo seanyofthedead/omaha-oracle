@@ -37,6 +37,7 @@ def _seed_decision(table, decision: dict) -> None:
     item = {
         "pk": "DECISION",
         "sk": decision.get("decision_id", "dec-1"),
+        "record_type": "DECISION",
         "ticker": decision.get("ticker", ""),
         "signal": decision.get("signal", ""),
         "timestamp": decision.get("timestamp", ""),
@@ -130,6 +131,7 @@ class TestFeedbackLoopIntegration:
             "created_at": now.isoformat(),
             "expires_at": expiry,
             "active": True,
+            "active_flag": "1",
         }
         lessons_table.put_item(Item=lesson_item)
 

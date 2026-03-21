@@ -30,6 +30,18 @@ def integration_tables(aws_env: None):
             AttributeDefinitions=[
                 {"AttributeName": "pk", "AttributeType": "S"},
                 {"AttributeName": "sk", "AttributeType": "S"},
+                {"AttributeName": "record_type", "AttributeType": "S"},
+                {"AttributeName": "timestamp", "AttributeType": "S"},
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    "IndexName": "record_type-timestamp-index",
+                    "KeySchema": [
+                        {"AttributeName": "record_type", "KeyType": "HASH"},
+                        {"AttributeName": "timestamp", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
             ],
             BillingMode="PAY_PER_REQUEST",
         )
@@ -44,6 +56,18 @@ def integration_tables(aws_env: None):
             AttributeDefinitions=[
                 {"AttributeName": "lesson_type", "AttributeType": "S"},
                 {"AttributeName": "lesson_id", "AttributeType": "S"},
+                {"AttributeName": "active_flag", "AttributeType": "S"},
+                {"AttributeName": "expires_at", "AttributeType": "S"},
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    "IndexName": "active_flag-expires_at-index",
+                    "KeySchema": [
+                        {"AttributeName": "active_flag", "KeyType": "HASH"},
+                        {"AttributeName": "expires_at", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
             ],
             BillingMode="PAY_PER_REQUEST",
         )
