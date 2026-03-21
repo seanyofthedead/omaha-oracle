@@ -1,3 +1,17 @@
+[theme]
+base = "dark"
+primaryColor = "#6C9EFF"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#161B22"
+textColor = "#E6EDF3"
+
+# Typography — custom Google Fonts with fallbacks
+font = "DM-Sans:https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap, sans-serif"
+headingFont = "Plus-Jakarta-Sans:https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&display=swap, sans-serif"
+codeFont = "JetBrains-Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap, monospace"
+baseFontSize = 16
+baseFontWeight = 400
+
 [server]
 # Restrict WebSocket connections to same origin (default true — pinned explicitly).
 enableCORS = true
@@ -7,3 +21,9 @@ enableXsrfProtection = true
 
 # Do not expose the Streamlit version in response headers.
 headless = true
+
+# Serve static files from the static/ directory.
+enableStaticServing = true
+
+[browser]
+gatherUsageStats = false
