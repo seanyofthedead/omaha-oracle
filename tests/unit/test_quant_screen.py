@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from analysis.quant_screen.handler import (
+from analysis.quant_screen.financials import (
     DEFAULT_THRESHOLDS,
     _aggregate_financials_by_year,
     _cv,
-    _piotroski_score,
-    _screen_company,
 )
+from analysis.quant_screen.piotroski import piotroski_score
+from analysis.quant_screen.screener import screen_company
 from tests.fixtures.mock_data import (
     APPLE_COMPANY_QUANT_PASS,
     APPLE_FINANCIAL_ITEMS,
@@ -76,22 +76,22 @@ class TestCV:
 
 
 class TestPiotroskiScore:
-    """Test _piotroski_score."""
+    """Test piotroski_score."""
 
     def test_apple_scores_high(self):
         years = sorted(APPLE_FINANCIALS_BY_YEAR.keys(), reverse=True)
-        score = _piotroski_score(APPLE_FINANCIALS_BY_YEAR, years)
+        score = piotroski_score(APPLE_FINANCIALS_BY_YEAR, years)
         assert score >= 6
 
     def test_less_than_two_years_returns_zero(self):
-        assert _piotroski_score({2024: {}}, [2024]) == 0
+        assert piotroski_score({2024: {}}, [2024]) == 0
 
 
 class TestScreenCompanyApple:
     """Apple should pass most screens."""
 
     def test_apple_passes_with_conservative_multiples(self):
-        result, passed = _screen_company(
+        result, passed = screen_company(
             "AAPL",
             APPLE_COMPANY_QUANT_PASS,
             _make_fin_client(APPLE_FINANCIAL_ITEMS),
@@ -110,7 +110,7 @@ class TestScreenCompanyGameStop:
     """GameStop should fail (negative earnings, volatile)."""
 
     def test_gamestop_fails(self):
-        result, passed = _screen_company(
+        result, passed = screen_company(
             "GME",
             GAMESTOP_COMPANY,
             _make_fin_client(GAMESTOP_FINANCIAL_ITEMS),
@@ -120,7 +120,7 @@ class TestScreenCompanyGameStop:
         assert result["pass"] is False
 
     def test_gamestop_negative_pe_or_low_piotroski(self):
-        result, _ = _screen_company(
+        result, _ = screen_company(
             "GME",
             GAMESTOP_COMPANY,
             _make_fin_client(GAMESTOP_FINANCIAL_ITEMS),
@@ -143,7 +143,7 @@ class TestScreenCompanyEdgeCases:
         for year, metrics in ZERO_EQUITY_FINANCIALS.items():
             for m, v in metrics.items():
                 items.append({"period_end_date": f"{year}-12-31", "metric_name": m, "value": v})
-        result, passed = _screen_company(
+        result, passed = screen_company(
             "ZERO",
             ZERO_EQUITY_COMPANY,
             _make_fin_client(items),
@@ -157,7 +157,7 @@ class TestScreenCompanyEdgeCases:
         for year, metrics in NEGATIVE_REVENUE_FINANCIALS.items():
             for m, v in metrics.items():
                 items.append({"period_end_date": f"{year}-12-31", "metric_name": m, "value": v})
-        result, passed = _screen_company(
+        result, passed = screen_company(
             "NEG",
             NEGATIVE_REVENUE_COMPANY,
             _make_fin_client(items),
@@ -166,7 +166,7 @@ class TestScreenCompanyEdgeCases:
         assert passed is False
 
     def test_no_financials_returns_no_pass(self):
-        result, passed = _screen_company(
+        result, passed = screen_company(
             "MISSING",
             {"ticker": "MISSING", "trailingPE": 10, "marketCap": 1e9},
             _make_fin_client([]),

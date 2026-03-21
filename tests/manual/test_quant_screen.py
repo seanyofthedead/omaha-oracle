@@ -16,12 +16,11 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from analysis.quant_screen.handler import (
+from analysis.quant_screen.financials import (
     DEFAULT_THRESHOLDS,
-    _aggregate_financials_by_year,
     _load_thresholds,
-    _screen_company,
 )
+from analysis.quant_screen.screener import screen_company
 
 # ------------------------------------------------------------------ #
 # Mock config client — returns None so _load_thresholds uses defaults  #
@@ -367,8 +366,9 @@ def main() -> None:
 
     for c in COMPANIES:
         items = c["financials"]()
-        by_year = _aggregate_financials_by_year(items)
-        result, passed = _screen_company(c["ticker"], c["company"], by_year, thresholds)
+        fin_client = MagicMock()
+        fin_client.query.return_value = items
+        result, passed = screen_company(c["ticker"], c["company"], fin_client, thresholds)
         failed = _failed_criteria(result, thresholds)
         summary.append((c["ticker"], c["name"], passed, failed))
         _print_scorecard(c["name"], c["ticker"], result, failed, passed)

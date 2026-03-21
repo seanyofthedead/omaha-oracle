@@ -16,10 +16,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from monitoring.owners_letter.handler import (
-    _apply_threshold_adjustments,
-    _classify_outcome,
-)
+from monitoring.owners_letter.audit import _classify_outcome
+from monitoring.owners_letter.pipeline import apply_threshold_adjustments
 
 
 class TestClassifyOutcome:
@@ -65,7 +63,7 @@ class TestApplyThresholdAdjustments:
                 "lesson_id": "L1",
             },
         ]
-        auto_applied, flagged = _apply_threshold_adjustments(lessons, config_client)
+        auto_applied, flagged = apply_threshold_adjustments(lessons, config_client)
         assert len(auto_applied) == 1
         # 15 * 1.20 = 18 (capped), not 25
         assert auto_applied[0]["new_value"] == pytest.approx(18.0, rel=0.01)
@@ -90,8 +88,8 @@ class TestApplyThresholdAdjustments:
                 "lesson_id": "L2",
             },
         ]
-        auto_minor, flagged_minor = _apply_threshold_adjustments(lessons_minor, config_client)
-        auto_mod, flagged_mod = _apply_threshold_adjustments(lessons_moderate, config_client)
+        auto_minor, flagged_minor = apply_threshold_adjustments(lessons_minor, config_client)
+        auto_mod, flagged_mod = apply_threshold_adjustments(lessons_moderate, config_client)
         assert len(auto_minor) == 1
         assert len(flagged_mod) == 1
         assert len(auto_mod) == 0
@@ -106,7 +104,7 @@ class TestApplyThresholdAdjustments:
                 "lesson_id": "L1",
             },
         ]
-        auto_applied, flagged = _apply_threshold_adjustments(lessons, config_client)
+        auto_applied, flagged = apply_threshold_adjustments(lessons, config_client)
         assert len(auto_applied) == 0
         assert len(flagged) == 1
         assert flagged[0]["severity"] == "moderate"
@@ -116,7 +114,7 @@ class TestAuditSummary:
     """Audit summary statistics."""
 
     def test_audit_summary_mistake_rate_and_sector(self):
-        from monitoring.owners_letter.handler import _run_outcome_audit
+        from monitoring.owners_letter.audit import run_outcome_audit
 
         decisions_client = MagicMock()
         decisions_client.query.return_value = [
@@ -130,7 +128,7 @@ class TestAuditSummary:
         ]
         with patch("monitoring.owners_letter.audit._fetch_price") as mock_fetch:
             mock_fetch.side_effect = lambda t, d=None: 75.0 if t == "BAD" else 0.0
-            audits, summary = _run_outcome_audit(decisions_client, 2025, 1)
+            audits, summary = run_outcome_audit(decisions_client, 2025, 1)
         assert summary["total_decisions"] == 1
         assert summary["mistake_rate"] == 1.0
         assert "sector_mistakes" in summary
