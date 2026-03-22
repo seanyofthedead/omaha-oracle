@@ -37,6 +37,7 @@ _PAGE_MODULES = {
     "Feedback Loop": "dashboard.views.feedback_loop",
     "Upload Analysis": "dashboard.views.upload_analysis",
     "Company Search": "dashboard.views.company_search",
+    "Paper Trading": "dashboard.views.paper_trading",
 }
 
 

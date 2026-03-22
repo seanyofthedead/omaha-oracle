@@ -27,6 +27,7 @@ _PAGE_ICONS = {
     "Feedback Loop": ":material/autorenew:",
     "Upload Analysis": ":material/upload_file:",
     "Company Search": ":material/search:",
+    "Paper Trading": ":material/candlestick_chart:",
 }
 
 

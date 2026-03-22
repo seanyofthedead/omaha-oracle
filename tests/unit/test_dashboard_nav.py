@@ -39,6 +39,7 @@ EXPECTED_PAGES = {
     "Feedback Loop": "dashboard.views.feedback_loop",
     "Upload Analysis": "dashboard.views.upload_analysis",
     "Company Search": "dashboard.views.company_search",
+    "Paper Trading": "dashboard.views.paper_trading",
 }
 
 
@@ -81,6 +82,7 @@ class TestViewsDirectoryContents:
         "feedback_loop.py",
         "upload_analysis.py",
         "company_search.py",
+        "paper_trading.py",
     }
 
     def test_all_page_files_present(self):
@@ -119,8 +121,8 @@ class TestPageModuleMapping:
                 "This would import from the renamed directory and fail at runtime."
             )
 
-    def test_all_eight_pages_registered(self):
-        assert len(self._get_page_modules()) == 8
+    def test_all_nine_pages_registered(self):
+        assert len(self._get_page_modules()) == 9
 
 
 # ---------------------------------------------------------------------------
