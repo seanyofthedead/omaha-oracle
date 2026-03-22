@@ -84,6 +84,16 @@ class TestFilingContextExtraction:
         assert len(text) <= 200  # prefix + truncated content + suffix
         assert "truncated" in text.lower()
 
+    def test_pdf_extraction_returns_warning_marker(self):
+        """PDF extraction must return text containing 'not yet supported'."""
+        text = extract_filing_text(b"%PDF-1.4 binary content", "report.pdf", _meta())
+        assert "not yet supported" in text.lower()
+
+    def test_xlsx_extraction_returns_warning_marker(self):
+        """XLSX extraction must return text containing 'not yet supported'."""
+        text = extract_filing_text(b"PK\x03\x04 fake xlsx", "data.xlsx", _meta())
+        assert "not yet supported" in text.lower()
+
     def test_context_prefixed_with_metadata(self):
         text = extract_filing_text(b"<p>data</p>", "filing.html", _meta())
         assert "10-K" in text

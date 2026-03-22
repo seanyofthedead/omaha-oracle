@@ -89,6 +89,41 @@ class TestResultsDisplay:
 # ---------------------------------------------------------------------------
 
 
+class TestPdfWarning:
+    """After uploading a PDF, st.warning must be called with extraction-limitation notice."""
+
+    @patch("dashboard.views.upload_analysis.store_uploaded_file", return_value="uploads/AAPL/2025/10-K/ts.pdf")
+    @patch("dashboard.views.upload_analysis.run_upload_analysis", return_value={"ticker": "AAPL"})
+    @patch("dashboard.views.upload_analysis.build_analysis_event", return_value={"ticker": "AAPL"})
+    @patch("dashboard.views.upload_analysis.extract_filing_text")
+    @patch("dashboard.views.upload_analysis.validate_upload", return_value=[])
+    @patch("dashboard.views.upload_analysis.st")
+    def test_upload_page_shows_pdf_warning(
+        self, mock_st, mock_validate, mock_extract, mock_build, mock_run, mock_store
+    ):
+        """After uploading a PDF, st.warning must be called with extraction-limitation notice."""
+        mock_extract.return_value = (
+            "Uploaded filing: 10-K for Apple Inc. (AAPL), FY2025\n\n"
+            "PDF filing uploaded. Full text extraction is not yet supported."
+        )
+        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+
+        fake_file = MagicMock()
+        fake_file.name = "report.pdf"
+        fake_file.size = 1024
+        fake_file.getvalue.return_value = b"%PDF-1.4 binary"
+
+        mod = importlib.import_module("dashboard.views.upload_analysis")
+        mod._handle_submission(fake_file, "AAPL", "Apple Inc.", "10-K", 2025, "", "")
+
+        # st.warning must have been called with extraction-limitation notice
+        warning_calls = [c[0][0] for c in mock_st.warning.call_args_list]
+        assert any("not yet supported" in w.lower() for w in warning_calls), (
+            f"Expected st.warning about PDF extraction limitation, got: {warning_calls}"
+        )
+
+
 class TestErrorDisplay:
     def _get_handle_fn(self):
         mod = importlib.import_module("dashboard.views.upload_analysis")
@@ -124,6 +159,40 @@ class TestErrorDisplay:
         fn = self._get_handle_fn()
         fn(fake_file, "", "Apple Inc.", "10-K", 2025, "", "")
         mock_st.error.assert_called()
+
+    @patch("dashboard.views.upload_analysis.extract_filing_text", return_value="context")
+    @patch("dashboard.views.upload_analysis.validate_upload", return_value=[])
+    @patch("dashboard.views.upload_analysis.st")
+    def test_pipeline_error_hides_internal_details(self, mock_st, mock_validate, mock_extract):
+        """A sanitized error message must not contain internal paths, env vars, or API key refs."""
+        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+
+        # Make store_uploaded_file raise with internal details
+        internal_msg = (
+            "ConnectionError: Failed connecting to https://s3.amazonaws.com "
+            "at /home/deploy/.venv/lib/python3.11/site-packages/botocore/endpoint.py "
+            "ANTHROPIC_API_KEY=sk-ant-12345"
+        )
+        with patch(
+            "dashboard.views.upload_analysis.store_uploaded_file",
+            side_effect=Exception(internal_msg),
+        ):
+            fake_file = MagicMock()
+            fake_file.name = "report.html"
+            fake_file.size = 1024
+            fake_file.getvalue.return_value = b"<html>data</html>"
+
+            fn = self._get_handle_fn()
+            fn(fake_file, "AAPL", "Apple Inc.", "10-K", 2025, "", "")
+
+        # st.error must have been called, but NOT with the internal details
+        error_calls = [c[0][0] for c in mock_st.error.call_args_list]
+        for msg in error_calls:
+            assert "/home/deploy" not in msg, f"Internal path leaked: {msg}"
+            assert "ANTHROPIC_API_KEY" not in msg, f"API key ref leaked: {msg}"
+            assert "sk-ant-" not in msg, f"API key value leaked: {msg}"
+            assert "endpoint.py" not in msg, f"Internal file path leaked: {msg}"
 
     @patch("dashboard.views.upload_analysis.st")
     def test_partial_results_display(self, mock_st):

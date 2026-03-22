@@ -9,7 +9,6 @@ from __future__ import annotations
 import sys as _sys
 from collections.abc import Callable
 from typing import Any
-from unittest.mock import patch
 
 import analysis.intrinsic_value.handler as _iv_mod
 import analysis.management_quality.handler as _mgmt_mod
@@ -71,16 +70,36 @@ _STAGE_NAMES = [
 _THIS = _sys.modules[__name__]
 
 
+def _default_get_filing_context() -> Callable[..., tuple[str, bool]]:
+    """Return the real S3Client.get_filing_context method."""
+    from shared.s3_client import S3Client
+
+    client = S3Client()
+    return client.get_filing_context
+
+
+def _make_filing_context_override(
+    filing_context: str,
+) -> Callable[..., tuple[str, bool]]:
+    """Return a callable that always returns *filing_context*."""
+
+    def _override(*_args: Any, **_kwargs: Any) -> tuple[str, bool]:
+        return (filing_context, False)
+
+    return _override
+
+
 def run_upload_analysis(
     event: dict[str, Any],
     filing_context: str,
     *,
     progress_callback: Callable[[str, int], None] | None = None,
+    get_filing_context: Callable[..., tuple[str, bool]] | None = None,
 ) -> dict[str, Any]:
     """Run analysis stages 2-5 in sequence, returning the accumulated result.
 
-    Filing context from the uploaded document is injected by patching
-    ``S3Client.get_filing_context`` so existing handlers see it without
+    Filing context from the uploaded document is injected via the
+    *get_filing_context* callable so existing handlers see it without
     modification.
 
     Parameters
@@ -91,8 +110,15 @@ def run_upload_analysis(
         Extracted text from the uploaded filing.
     progress_callback:
         Optional ``(stage_name, stage_number) -> None`` called before each stage.
+    get_filing_context:
+        Optional callable replacing ``S3Client.get_filing_context``.  Defaults
+        to a closure that returns *filing_context* directly.
     """
+    if get_filing_context is None:
+        get_filing_context = _make_filing_context_override(filing_context)
+
     current = dict(event)
+    current["_get_filing_context"] = get_filing_context
 
     for idx, (stage_name, attr_name) in enumerate(_STAGE_NAMES, start=1):
         if progress_callback:
@@ -101,12 +127,7 @@ def run_upload_analysis(
         handler_fn = getattr(_THIS, attr_name)
 
         try:
-            # Inject uploaded filing context for moat and management stages
-            with patch(
-                "shared.s3_client.S3Client.get_filing_context",
-                return_value=(filing_context, False),
-            ):
-                current = handler_fn(current, None)
+            current = handler_fn(current, None)
         except Exception as exc:
             _log.error(
                 "Pipeline stage failed",
