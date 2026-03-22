@@ -1,0 +1,52 @@
+name: Auto-Merge-Branches
+
+on:
+  workflow_dispatch: # Allows manual trigger of this workflow
+
+jobs:
+  test_and_merge:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Check out the repository code
+    - name: Check Out Code
+      uses: actions/checkout@v3
+
+    # Step 2: List all branches
+    - name: Fetch All Branches
+      run: |
+        git fetch --all
+        echo "Branches in the repo:"
+        git branch -r
+
+    # Step 3: Run Test-Driven Development for Conflicts and Tests
+    - name: Test and Merge Branch
+      env:
+        MAIN_BRANCH: main
+      run: |
+        set -e
+
+        # Step 3.1: List all branches (excluding main)
+        branches=$(git branch -r | grep -v $MAIN_BRANCH | sed 's|origin/||')
+
+        # Step 3.2: Create and test a temporary branch for merging
+        for branch in $branches; do
+          echo "Attempting to merge branch: $branch"
+          git checkout $MAIN_BRANCH
+          git pull origin $MAIN_BRANCH
+
+          # Test branch before merging
+          git checkout $branch
+          echo "Running tests for branch: $branch"
+          if ! npm test; then
+            echo "Tests failed for $branch. Exiting merge process."
+            exit 1
+          fi
+
+          # Merge into main
+          git checkout $MAIN_BRANCH
+          git merge $branch --strategy-option theirs || exit 1
+        done
+
+        # Push final results to main
+        git push origin $MAIN_BRANCH
