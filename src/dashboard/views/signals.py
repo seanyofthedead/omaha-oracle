@@ -122,12 +122,14 @@ def render() -> None:
         )
         return
 
-    st.toast(
-        f"Showing {len(decisions)} signals "
-        f"({len(buy_decisions)} buys, "
-        f"{len(sell_decisions)} sells)",
-        icon="✅",
-    )
+    if "page_toast_shown" not in st.session_state:
+        st.toast(
+            f"Showing {len(decisions)} signals "
+            f"({len(buy_decisions)} buys, "
+            f"{len(sell_decisions)} sells)",
+            icon="✅",
+        )
+        st.session_state.page_toast_shown = True
 
     # ── Tier 2: Primary content in tabs ──
     tab_all, tab_buys, tab_sells = st.tabs(["All Signals", "Buys", "Sells"])

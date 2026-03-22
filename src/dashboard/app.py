@@ -13,8 +13,10 @@ For Lambda deployment, use a container (Streamlit is not ASGI/Mangum-compatible)
 
 from __future__ import annotations
 
+import hmac
 import importlib
 import sys
+import time
 from pathlib import Path
 
 # Ensure src is on path when run as streamlit run dashboard/app.py
@@ -64,12 +66,27 @@ def _require_auth() -> None:
                 )
                 submitted = st.form_submit_button("Login", use_container_width=True)
             if submitted:
-                expected = st.secrets.get("dashboard_password", "")
-                if expected and pwd == expected:
-                    st.session_state.authenticated = True
-                    st.rerun()
+                # Rate limiting: track failed attempts within a 60-second window
+                if "login_attempts" not in st.session_state:
+                    st.session_state.login_attempts = []
+                now = time.time()
+                # Prune attempts older than 60 seconds
+                st.session_state.login_attempts = [
+                    t for t in st.session_state.login_attempts if now - t < 60
+                ]
+                if len(st.session_state.login_attempts) >= 5:
+                    st.error(
+                        "Too many failed attempts. Please wait 60 seconds before trying again."
+                    )
                 else:
-                    st.error("Incorrect password.")
+                    expected = st.secrets.get("dashboard_password", "")
+                    if expected and hmac.compare_digest(pwd.encode(), expected.encode()):
+                        st.session_state.authenticated = True
+                        st.session_state.login_attempts = []
+                        st.rerun()
+                    else:
+                        st.session_state.login_attempts.append(now)
+                        st.error("Incorrect password.")
         st.stop()
 
 

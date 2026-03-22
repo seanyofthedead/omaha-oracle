@@ -80,6 +80,11 @@ def render_sidebar(page_names: list[str]) -> str:
 
     st.sidebar.divider()
 
+    # ── Refresh Data ──
+    if st.sidebar.button("↻ Refresh Data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
     # ── Footer ──
     env = _get_environment()
     env_color = "#4CAF50" if env == "dev" else "#F44336"
