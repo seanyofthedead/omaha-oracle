@@ -54,6 +54,7 @@ def get_correlation_id() -> str:
 # JSON formatter                                                       #
 # ------------------------------------------------------------------ #
 
+
 class JsonFormatter(logging.Formatter):
     """
     Emit each log record as a compact JSON line.
@@ -76,6 +77,7 @@ class JsonFormatter(logging.Formatter):
     )
 
     def format(self, record: logging.LogRecord) -> str:
+        """Serialize *record* to a JSON string with standard fields."""
         record.message = record.getMessage()
 
         payload: dict[str, Any] = {
@@ -105,6 +107,7 @@ class JsonFormatter(logging.Formatter):
 # Logger factory                                                       #
 # ------------------------------------------------------------------ #
 
+
 def _build_handler() -> logging.StreamHandler[Any]:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
@@ -131,9 +134,10 @@ def get_logger(name: str, level: int | str | None = None) -> logging.Logger:
     logger = logging.getLogger(name)
 
     # Attach our JSON handler exactly once per logger instance
-    if not any(isinstance(h, logging.StreamHandler) and
-               isinstance(h.formatter, JsonFormatter)
-               for h in logger.handlers):
+    if not any(
+        isinstance(h, logging.StreamHandler) and isinstance(h.formatter, JsonFormatter)
+        for h in logger.handlers
+    ):
         logger.addHandler(_build_handler())
         logger.propagate = False  # avoid double-printing to the root handler
 
@@ -147,6 +151,7 @@ def get_logger(name: str, level: int | str | None = None) -> logging.Logger:
 # Root-logger bootstrap (called once at import time)                   #
 # ------------------------------------------------------------------ #
 
+
 def _bootstrap_root_logger() -> None:
     """
     Configure the root logger with a JSON handler so that third-party
@@ -156,9 +161,10 @@ def _bootstrap_root_logger() -> None:
     variable automatically; we honour whatever level is already set.
     """
     root = logging.getLogger()
-    if not any(isinstance(h, logging.StreamHandler) and
-               isinstance(h.formatter, JsonFormatter)
-               for h in root.handlers):
+    if not any(
+        isinstance(h, logging.StreamHandler) and isinstance(h.formatter, JsonFormatter)
+        for h in root.handlers
+    ):
         root.addHandler(_build_handler())
         # Only set a default level when nothing has been configured yet
         if root.level == logging.NOTSET:

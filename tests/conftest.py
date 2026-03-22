@@ -5,6 +5,7 @@ Fixture dependency graph (for DynamoDB tests):
   reset_config (autouse) ──► all tests
   aws_env ──► dynamodb_table ──► cost_tracker
 """
+
 from __future__ import annotations
 
 import boto3
@@ -16,6 +17,8 @@ TABLE_NAME = "omaha-oracle-dev-cost-tracking"
 TABLE_LESSONS = "omaha-oracle-dev-lessons"
 TABLE_DECISIONS = "omaha-oracle-dev-decisions"
 TABLE_CONFIG = "omaha-oracle-dev-config"
+TABLE_ANALYSIS = "omaha-oracle-dev-analysis"
+TABLE_COMPANIES = "omaha-oracle-dev-companies"
 
 
 # ------------------------------------------------------------------ #
@@ -30,14 +33,13 @@ def reset_config():
     after every test.  Without this, a monkeypatched env var in test A would
     have no effect in test B because the cached Settings instance is reused.
     """
-    import shared.config as _cfg_module
-    from shared.config import get_config
+    from shared.config import _ssm_get, get_config
 
-    _cfg_module._ssm_cache.clear()
+    _ssm_get.cache_clear()
     get_config.cache_clear()
     yield
     get_config.cache_clear()
-    _cfg_module._ssm_cache.clear()
+    _ssm_get.cache_clear()
 
 
 # ------------------------------------------------------------------ #
@@ -138,6 +140,18 @@ def lessons_table(aws_env: None):
             AttributeDefinitions=[
                 {"AttributeName": "lesson_type", "AttributeType": "S"},
                 {"AttributeName": "lesson_id", "AttributeType": "S"},
+                {"AttributeName": "active_flag", "AttributeType": "S"},
+                {"AttributeName": "expires_at", "AttributeType": "S"},
+            ],
+            GlobalSecondaryIndexes=[
+                {
+                    "IndexName": "active_flag-expires_at-index",
+                    "KeySchema": [
+                        {"AttributeName": "active_flag", "KeyType": "HASH"},
+                        {"AttributeName": "expires_at", "KeyType": "RANGE"},
+                    ],
+                    "Projection": {"ProjectionType": "ALL"},
+                }
             ],
             BillingMode="PAY_PER_REQUEST",
         )
@@ -151,3 +165,42 @@ def lessons_client(lessons_table):  # noqa: ARG001
     from shared.lessons_client import LessonsClient
 
     return LessonsClient(table_name=TABLE_LESSONS)
+
+
+@pytest.fixture()
+def iv_tables(aws_env: None):
+    """
+    Spin up config, analysis, and companies DynamoDB tables for intrinsic
+    value handler tests.  Yields the boto3 dynamodb resource so tests can
+    seed data directly via iv_tables.Table(TABLE_CONFIG).put_item(...).
+    """
+    with mock_aws():
+        ddb = boto3.resource("dynamodb", region_name="us-east-1")
+        # Config table: PK=config_key
+        ddb.create_table(
+            TableName=TABLE_CONFIG,
+            KeySchema=[{"AttributeName": "config_key", "KeyType": "HASH"}],
+            AttributeDefinitions=[{"AttributeName": "config_key", "AttributeType": "S"}],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        # Analysis table: PK=ticker, SK=analysis_date
+        ddb.create_table(
+            TableName=TABLE_ANALYSIS,
+            KeySchema=[
+                {"AttributeName": "ticker", "KeyType": "HASH"},
+                {"AttributeName": "analysis_date", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "ticker", "AttributeType": "S"},
+                {"AttributeName": "analysis_date", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        # Companies table: PK=ticker (for _resolve_metrics fallback)
+        ddb.create_table(
+            TableName=TABLE_COMPANIES,
+            KeySchema=[{"AttributeName": "ticker", "KeyType": "HASH"}],
+            AttributeDefinitions=[{"AttributeName": "ticker", "AttributeType": "S"}],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        yield ddb

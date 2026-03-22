@@ -4,6 +4,7 @@ Manual test for Owner's Letter & Post-Mortem engine.
 Uses mock data only — NO AWS calls. Run from project root:
   python tests\\manual\\test_postmortem.py
 """
+
 # ruff: noqa: E501
 from __future__ import annotations
 
@@ -85,8 +86,22 @@ MOCK_ACCOUNT = {
 }
 
 MOCK_POSITIONS = [
-    {"pk": "POSITION", "sk": "FAKECO", "ticker": "FAKECO", "shares": 200, "cost_basis": 10000, "market_value": 7000},
-    {"pk": "POSITION", "sk": "WINNER", "ticker": "WINNER", "shares": 50, "cost_basis": 5000, "market_value": 6250},
+    {
+        "pk": "POSITION",
+        "sk": "FAKECO",
+        "ticker": "FAKECO",
+        "shares": 200,
+        "cost_basis": 10000,
+        "market_value": 7000,
+    },
+    {
+        "pk": "POSITION",
+        "sk": "WINNER",
+        "ticker": "WINNER",
+        "shares": 50,
+        "cost_basis": 5000,
+        "market_value": 6250,
+    },
 ]
 
 MOCK_CONFIG = {
@@ -117,8 +132,19 @@ MOCK_LESSONS = {
             "description": "Overrated FAKECO moat — confused market share with structural defensibility",
             "actionable_rule": "For Technology companies, verify switching costs exist independent of market share before scoring moat above 6",
             "prompt_injection_text": "HISTORICAL LESSON: In Q1 2026, we scored FAKECO moat at 8 based on high market share, but the moat eroded when a competitor launched. In Technology, always verify switching costs exist independent of market position.",
-            "threshold_adjustment": {"parameter": None, "current_value": None, "proposed_value": None, "scope": "sector:Technology", "reasoning": "N/A"},
-            "confidence_calibration": {"analysis_stage": "moat_analysis", "bias_direction": "overconfident", "adjustment_factor": 0.85, "reasoning": "Tech moat scores have been ~15% too high"},
+            "threshold_adjustment": {
+                "parameter": None,
+                "current_value": None,
+                "proposed_value": None,
+                "scope": "sector:Technology",
+                "reasoning": "N/A",
+            },
+            "confidence_calibration": {
+                "analysis_stage": "moat_analysis",
+                "bias_direction": "overconfident",
+                "adjustment_factor": 0.85,
+                "reasoning": "Tech moat scores have been ~15% too high",
+            },
             "expiry_quarters": 8,
         },
         {
@@ -130,8 +156,19 @@ MOCK_LESSONS = {
             "description": "Missed MISSEDCO because moat threshold too strict for Healthcare where regulatory barriers help",
             "actionable_rule": "For Healthcare companies with regulatory barriers, consider moat score of 6 as passing threshold instead of 7",
             "prompt_injection_text": "HISTORICAL LESSON: We passed on MISSEDCO (Healthcare) because moat was 6, but regulatory barriers provided more protection than our score reflected. Healthcare moats may deserve slightly lower thresholds.",
-            "threshold_adjustment": {"parameter": "min_moat_score", "current_value": 7, "proposed_value": 6, "scope": "sector:Healthcare", "reasoning": "Regulatory barriers undervalued in moat scoring"},
-            "confidence_calibration": {"analysis_stage": "moat_analysis", "bias_direction": "underconfident", "adjustment_factor": 1.10, "reasoning": "Healthcare moat scores slightly too conservative"},
+            "threshold_adjustment": {
+                "parameter": "min_moat_score",
+                "current_value": 7,
+                "proposed_value": 6,
+                "scope": "sector:Healthcare",
+                "reasoning": "Regulatory barriers undervalued in moat scoring",
+            },
+            "confidence_calibration": {
+                "analysis_stage": "moat_analysis",
+                "bias_direction": "underconfident",
+                "adjustment_factor": 1.10,
+                "reasoning": "Healthcare moat scores slightly too conservative",
+            },
             "expiry_quarters": 6,
         },
     ],
@@ -202,7 +239,11 @@ class MockS3Client:
         self.last_json_key = key
         self.last_json = data
         print("[S3 write_json captured]", key)
-        print(json.dumps(data, indent=2, default=str)[:1000] + "..." if len(json.dumps(data)) > 1000 else json.dumps(data, indent=2, default=str))
+        print(
+            json.dumps(data, indent=2, default=str)[:1000] + "..."
+            if len(json.dumps(data)) > 1000
+            else json.dumps(data, indent=2, default=str)
+        )
         print()
 
 
@@ -212,7 +253,16 @@ class MockLLMClient:
     def __init__(self, cost_tracker=None):
         self._call_count = 0
 
-    def invoke(self, tier=None, user_prompt=None, system_prompt=None, module=None, max_tokens=None, temperature=None, require_json=None):
+    def invoke(
+        self,
+        tier=None,
+        user_prompt=None,
+        system_prompt=None,
+        module=None,
+        max_tokens=None,
+        temperature=None,
+        require_json=None,
+    ):
         self._call_count += 1
         if self._call_count == 1:
             return {
@@ -267,7 +317,9 @@ def main():
     print("=== PHASE 1: OUTCOME AUDIT ===")
     print("=" * 60)
     for d in decision_audit:
-        print(f"  {d.get('ticker')}: {d.get('signal')} @ ${d.get('price_at_decision')} -> ${d.get('current_price')} => {d.get('outcome')}")
+        print(
+            f"  {d.get('ticker')}: {d.get('signal')} @ ${d.get('price_at_decision')} -> ${d.get('current_price')} => {d.get('outcome')}"
+        )
 
     print("\n" + "=" * 60)
     print("=== PHASE 2: LETTER ===")
@@ -278,14 +330,18 @@ def main():
     print("=== PHASE 3: LESSONS EXTRACTED ===")
     print("=" * 60)
     for i, lesson in enumerate(lessons_extracted, 1):
-        print(f"Lesson {i}: {lesson.get('lesson_id')} ({lesson.get('lesson_type')}, {lesson.get('severity')})")
+        print(
+            f"Lesson {i}: {lesson.get('lesson_id')} ({lesson.get('lesson_type')}, {lesson.get('severity')})"
+        )
         print(f"  Ticker: {lesson.get('ticker')}, Sector: {lesson.get('sector')}")
         print(f"  Description: {lesson.get('description')}")
         print(f"  Actionable: {lesson.get('actionable_rule')}")
         print(f"  Prompt injection: {(lesson.get('prompt_injection_text') or '')[:120]}...")
         if lesson.get("threshold_adjustment"):
             ta = lesson["threshold_adjustment"]
-            print(f"  Threshold: {ta.get('parameter')} -> {ta.get('proposed_value')} (scope: {ta.get('scope')})")
+            print(
+                f"  Threshold: {ta.get('parameter')} -> {ta.get('proposed_value')} (scope: {ta.get('scope')})"
+            )
         print()
 
     print("=" * 60)

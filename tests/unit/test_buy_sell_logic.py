@@ -6,9 +6,11 @@ Unit tests for buy/sell decision logic.
 - Thesis broken → SELL
 - Price decline alone → HOLD (never panic sell)
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from portfolio.allocation.buy_sell_logic import evaluate_buy, evaluate_sell
@@ -35,7 +37,12 @@ class TestEvaluateBuyAllPass:
         assert len(result["reasons_fail"]) == 0
 
     def test_sector_whitelist_empty_allows(self):
-        analysis = {"margin_of_safety": 0.35, "moat_score": 8, "management_score": 6, "sector": "Tech"}
+        analysis = {
+            "margin_of_safety": 0.35,
+            "moat_score": 8,
+            "management_score": 6,
+            "sector": "Tech",
+        }
         portfolio_state = {
             "cash_available": 10_000,
             "portfolio_value": 50_000,
@@ -50,28 +57,63 @@ class TestEvaluateBuyOneFail:
     """One criterion fail → NO_BUY."""
 
     def test_low_mos_no_buy(self):
-        analysis = {"margin_of_safety": 0.20, "moat_score": 8, "management_score": 7, "sector": "Tech"}
-        portfolio_state = {"cash_available": 50_000, "portfolio_value": 100_000, "positions": [], "sector_exposure": {}}
+        analysis = {
+            "margin_of_safety": 0.20,
+            "moat_score": 8,
+            "management_score": 7,
+            "sector": "Tech",
+        }
+        portfolio_state = {
+            "cash_available": 50_000,
+            "portfolio_value": 100_000,
+            "positions": [],
+            "sector_exposure": {},
+        }
         result = evaluate_buy("X", analysis, portfolio_state)
         assert result["signal"] == "NO_BUY"
         assert any("MoS" in r for r in result["reasons_fail"])
 
     def test_low_moat_no_buy(self):
-        analysis = {"margin_of_safety": 0.40, "moat_score": 5, "management_score": 7, "sector": "Tech"}
-        portfolio_state = {"cash_available": 50_000, "portfolio_value": 100_000, "positions": [], "sector_exposure": {}}
+        analysis = {
+            "margin_of_safety": 0.40,
+            "moat_score": 5,
+            "management_score": 7,
+            "sector": "Tech",
+        }
+        portfolio_state = {
+            "cash_available": 50_000,
+            "portfolio_value": 100_000,
+            "positions": [],
+            "sector_exposure": {},
+        }
         result = evaluate_buy("X", analysis, portfolio_state)
         assert result["signal"] == "NO_BUY"
         assert any("moat" in r.lower() for r in result["reasons_fail"])
 
     def test_no_cash_no_buy(self):
-        analysis = {"margin_of_safety": 0.40, "moat_score": 8, "management_score": 7, "sector": "Tech"}
-        portfolio_state = {"cash_available": 0, "portfolio_value": 100_000, "positions": [], "sector_exposure": {}}
+        analysis = {
+            "margin_of_safety": 0.40,
+            "moat_score": 8,
+            "management_score": 7,
+            "sector": "Tech",
+        }
+        portfolio_state = {
+            "cash_available": 0,
+            "portfolio_value": 100_000,
+            "positions": [],
+            "sector_exposure": {},
+        }
         result = evaluate_buy("X", analysis, portfolio_state)
         assert result["signal"] == "NO_BUY"
         assert any("cash" in r.lower() for r in result["reasons_fail"])
 
     def test_sector_at_limit_no_buy(self):
-        analysis = {"margin_of_safety": 0.40, "moat_score": 8, "management_score": 7, "sector": "Tech"}
+        analysis = {
+            "margin_of_safety": 0.40,
+            "moat_score": 8,
+            "management_score": 7,
+            "sector": "Tech",
+        }
         portfolio_state = {
             "cash_available": 50_000,
             "portfolio_value": 100_000,
@@ -95,7 +137,10 @@ class TestEvaluateSellThesisBroken:
         ]
 
     def test_thesis_broken_returns_sell(self, moat_history_broken):
-        position = {"purchase_date": (datetime.now(UTC) - timedelta(days=400)).isoformat(), "shares": 100}
+        position = {
+            "purchase_date": (datetime.now(UTC) - timedelta(days=400)).isoformat(),
+            "shares": 100,
+        }
         analysis = {"intrinsic_value_per_share": 150, "current_price": 100}
         result = evaluate_sell("X", position, analysis, {}, moat_history=moat_history_broken)
         assert result["signal"] == "SELL"
@@ -106,7 +151,10 @@ class TestEvaluateSellPriceDeclineHold:
     """Price decline alone → HOLD (never panic sell)."""
 
     def test_price_decline_no_sell(self):
-        position = {"purchase_date": (datetime.now(UTC) - timedelta(days=400)).isoformat(), "shares": 100}
+        position = {
+            "purchase_date": (datetime.now(UTC) - timedelta(days=400)).isoformat(),
+            "shares": 100,
+        }
         analysis = {"intrinsic_value_per_share": 120, "current_price": 80}  # Down from purchase
         result = evaluate_sell("X", position, analysis, {}, moat_history=None)
         assert result["signal"] == "HOLD"

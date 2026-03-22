@@ -12,6 +12,7 @@ DynamoDB is mocked via moto (mock_aws context in shared fixtures).
 ClientError scenarios use unittest.mock.patch so the error path is tested
 independently of moto internals.
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -190,9 +191,7 @@ class TestLogUsage:
     def test_happy_path_returns_float_cost(self, cost_tracker: CostTracker):
         # The float return value is used by callers to gate budget decisions.
         # It must equal compute_cost for the same inputs.
-        result = cost_tracker.log_usage(
-            "claude-opus-4-20250514", 1000, 500, "analysis", "AAPL"
-        )
+        result = cost_tracker.log_usage("claude-opus-4-20250514", 1000, 500, "analysis", "AAPL")
         expected = float(compute_cost("claude-opus-4-20250514", 1000, 500))
         assert isinstance(result, float)
         assert result == pytest.approx(expected)
@@ -202,9 +201,7 @@ class TestLogUsage:
     ):
         # Every field in the item schema must be present and correctly typed;
         # a missing field would break get_monthly_spend's cost_usd aggregation.
-        cost_tracker.log_usage(
-            "claude-opus-4-20250514", 1000, 500, "analysis", "AAPL"
-        )
+        cost_tracker.log_usage("claude-opus-4-20250514", 1000, 500, "analysis", "AAPL")
         response = dynamodb_table.scan()
         items = response["Items"]
         assert len(items) == 1
@@ -219,17 +216,13 @@ class TestLogUsage:
         assert "month_key" in item
         assert "timestamp" in item
 
-    def test_default_ticker_is_empty_string(
-        self, cost_tracker: CostTracker, dynamodb_table
-    ):
+    def test_default_ticker_is_empty_string(self, cost_tracker: CostTracker, dynamodb_table):
         # ticker is optional — omitting it must not raise and must store "".
         cost_tracker.log_usage("claude-opus-4-20250514", 100, 50, "screening")
         items = dynamodb_table.scan()["Items"]
         assert items[0]["ticker"] == ""
 
-    def test_zero_input_tokens_stored_correctly(
-        self, cost_tracker: CostTracker, dynamodb_table
-    ):
+    def test_zero_input_tokens_stored_correctly(self, cost_tracker: CostTracker, dynamodb_table):
         # A zero-token call is valid (e.g. a cached response); cost_usd must
         # reflect output-only pricing, not an error or a zero cost.
         cost_tracker.log_usage("claude-opus-4-20250514", 0, 1000, "portfolio")
@@ -246,9 +239,7 @@ class TestLogUsage:
             side_effect=_make_client_error("ProvisionedThroughputExceededException"),
         ):
             with pytest.raises(ClientError):
-                cost_tracker.log_usage(
-                    "claude-opus-4-20250514", 1000, 500, "analysis"
-                )
+                cost_tracker.log_usage("claude-opus-4-20250514", 1000, 500, "analysis")
 
 
 # ================================================================== #
@@ -268,17 +259,13 @@ class TestGetMonthlySpend:
         result = cost_tracker.get_monthly_spend("2099-01")
         assert result == Decimal("0.000000")
 
-    def test_single_item_summed_correctly(
-        self, cost_tracker: CostTracker, dynamodb_table
-    ):
+    def test_single_item_summed_correctly(self, cost_tracker: CostTracker, dynamodb_table):
         # Verifies the basic query + sum path against a known cost value.
         _seed_cost_item(dynamodb_table, "2026-03", "2026-03-01T00:00:00+00:00", Decimal("0.052500"))
         result = cost_tracker.get_monthly_spend("2026-03")
         assert result == Decimal("0.052500")
 
-    def test_multiple_items_summed_correctly(
-        self, cost_tracker: CostTracker, dynamodb_table
-    ):
+    def test_multiple_items_summed_correctly(self, cost_tracker: CostTracker, dynamodb_table):
         # Three records across different timestamps in the same month must be
         # aggregated into a single total (tests the accumulation loop).
         _seed_cost_item(dynamodb_table, "2026-03", "2026-03-01T00:00:00+00:00", Decimal("0.052500"))
@@ -287,9 +274,7 @@ class TestGetMonthlySpend:
         result = cost_tracker.get_monthly_spend("2026-03")
         assert result == Decimal("0.065800")
 
-    def test_default_month_key_uses_current_month(
-        self, cost_tracker: CostTracker, dynamodb_table
-    ):
+    def test_default_month_key_uses_current_month(self, cost_tracker: CostTracker, dynamodb_table):
         # When month_key=None the implementation falls back to UTC now().
         # Seed an item using the same logic to avoid coupling to a hard-coded date.
         from datetime import UTC, datetime
@@ -339,9 +324,7 @@ class TestCheckBudget:
     Budget is set to $100.00 by the aws_env fixture (MONTHLY_LLM_BUDGET_USD=100.0).
     """
 
-    def test_no_spend_gives_full_remaining(
-        self, cost_tracker: CostTracker
-    ):
+    def test_no_spend_gives_full_remaining(self, cost_tracker: CostTracker):
         # When no records exist the budget is untouched: spent=0, remaining=budget.
         status = cost_tracker.check_budget("2026-03")
         assert status["spent_usd"] == pytest.approx(0.0)
@@ -361,9 +344,7 @@ class TestCheckBudget:
         assert status["exhausted"] is False
         assert status["utilization_pct"] == pytest.approx(25.0)
 
-    def test_exactly_at_budget_is_exhausted(
-        self, cost_tracker: CostTracker, dynamodb_table
-    ):
+    def test_exactly_at_budget_is_exhausted(self, cost_tracker: CostTracker, dynamodb_table):
         # spent == budget must trigger exhausted=True; the boundary condition
         # is spend >= budget (not strictly greater-than).
         _seed_cost_item(
@@ -374,9 +355,7 @@ class TestCheckBudget:
         assert status["remaining_usd"] == pytest.approx(0.0)
         assert status["utilization_pct"] == pytest.approx(100.0)
 
-    def test_over_budget_remaining_clamped_to_zero(
-        self, cost_tracker: CostTracker, dynamodb_table
-    ):
+    def test_over_budget_remaining_clamped_to_zero(self, cost_tracker: CostTracker, dynamodb_table):
         # Spend above the cap must clamp remaining to 0 (never go negative)
         # and cap utilisation at 100 — callers must not see negative headroom.
         _seed_cost_item(
@@ -388,7 +367,9 @@ class TestCheckBudget:
         assert status["utilization_pct"] == pytest.approx(100.0)
 
     def test_zero_budget_utilization_is_always_100(
-        self, dynamodb_table, monkeypatch: pytest.MonkeyPatch  # noqa: ARG002
+        self,
+        dynamodb_table,
+        monkeypatch: pytest.MonkeyPatch,  # noqa: ARG002
     ):
         """
         When the configured budget is $0 the division-by-zero branch fires and

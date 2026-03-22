@@ -6,6 +6,7 @@ Unit tests for position sizing via Kelly criterion.
 - Max position cap enforcement
 - Min position threshold
 """
+
 from __future__ import annotations
 
 import pytest

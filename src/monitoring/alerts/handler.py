@@ -4,6 +4,7 @@ Centralized alert handler — sends SNS notifications for operational events.
 Alert types: buy_signal, trade_executed, thesis_break, error,
              weekly_digest, postmortem_complete
 """
+
 from __future__ import annotations
 
 import json

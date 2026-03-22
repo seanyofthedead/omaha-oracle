@@ -1,6 +1,7 @@
 """
 Reusable mock company data, decisions, and lessons for all tests.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -51,18 +52,21 @@ for y in range(2015, 2025):
         "shares_outstanding": 16_000_000_000,
     }
 
+
 # Convert to handler's financial items format (period_end_date, metric_name, value)
 def _financials_to_items(ticker: str, by_year: dict[int, dict[str, float]]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for year, metrics in by_year.items():
         period = f"{year}-09-30"
         for metric_name, value in metrics.items():
-            items.append({
-                "ticker": ticker,
-                "period_end_date": period,
-                "metric_name": metric_name,
-                "value": value,
-            })
+            items.append(
+                {
+                    "ticker": ticker,
+                    "period_end_date": period,
+                    "metric_name": metric_name,
+                    "value": value,
+                }
+            )
     return items
 
 
@@ -197,6 +201,7 @@ NEGATIVE_REVENUE_FINANCIALS: dict[int, dict[str, float]] = {
 # Decisions (for postmortem / feedback loop tests)                    #
 # ------------------------------------------------------------------ #
 
+
 def make_decision(
     ticker: str,
     signal: str,
@@ -242,6 +247,7 @@ CORRECT_PASS_DECISION["payload"]["signal"] = "NO_BUY"
 # Lessons (for LessonsClient tests)                                    #
 # ------------------------------------------------------------------ #
 
+
 def make_lesson(
     lesson_type: str,
     lesson_id: str,
@@ -269,6 +275,7 @@ def make_lesson(
         "created_at": now.isoformat(),
         "expires_at": expiry,
         "active": True,
+        "active_flag": "1",
     }
     if confidence_calibration:
         item["confidence_calibration"] = confidence_calibration
@@ -277,22 +284,31 @@ def make_lesson(
 
 # Ticker-specific lesson (highest relevance)
 LESSON_TICKER_AAPL = make_lesson(
-    "moat_bias", "L1", ticker="AAPL", sector="Technology",
+    "moat_bias",
+    "L1",
+    ticker="AAPL",
+    sector="Technology",
     prompt_injection_text="Apple has strong ecosystem moat.",
 )
 
 # Sector match
 LESSON_SECTOR_TECH = make_lesson(
-    "moat_bias", "L2", sector="Technology", industry="ALL",
+    "moat_bias",
+    "L2",
+    sector="Technology",
+    industry="ALL",
     prompt_injection_text="Tech companies need recurring revenue.",
 )
 
 # Stage match (confidence_calibration.analysis_stage = moat_analysis)
 LESSON_STAGE_MOAT = make_lesson(
-    "moat_bias", "L3", sector="ALL",
+    "moat_bias",
+    "L3",
+    sector="ALL",
     prompt_injection_text="Beware of moat bias in retail.",
     confidence_calibration={"analysis_stage": "moat_analysis", "sector": "ALL"},
 )
+
 
 # Expired lesson
 def _expired_lesson() -> dict[str, Any]:
@@ -304,7 +320,8 @@ LESSON_EXPIRED = _expired_lesson()
 
 # Confidence calibration
 LESSON_CONFIDENCE_08 = make_lesson(
-    "confidence_calibration", "L-conf-1",
+    "confidence_calibration",
+    "L-conf-1",
     confidence_calibration={
         "analysis_stage": "moat_analysis",
         "sector": "Technology",
@@ -312,7 +329,8 @@ LESSON_CONFIDENCE_08 = make_lesson(
     },
 )
 LESSON_CONFIDENCE_125 = make_lesson(
-    "confidence_calibration", "L-conf-2",
+    "confidence_calibration",
+    "L-conf-2",
     confidence_calibration={
         "analysis_stage": "moat_analysis",
         "sector": "Technology",

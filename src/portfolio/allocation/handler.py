@@ -4,6 +4,7 @@ Lambda handler for portfolio allocation.
 Processes buy candidates from analysis pipeline, evaluates existing positions
 for sell signals, logs all decisions to the decisions DynamoDB table.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -12,129 +13,70 @@ from typing import Any
 
 from boto3.dynamodb.conditions import Key
 
+from shared.analysis_client import load_latest_analysis
 from shared.config import get_config
+from shared.converters import safe_float
 from shared.dynamo_client import DynamoClient
 from shared.logger import get_logger
+from shared.portfolio_helpers import load_portfolio_state
 
 from .buy_sell_logic import evaluate_buy, evaluate_sell
 from .position_sizer import calculate_position_size
 
 _log = get_logger(__name__)
 
-# Portfolio table key layout
-PK_ACCOUNT = "ACCOUNT"
-SK_SUMMARY = "SUMMARY"
-PK_POSITION = "POSITION"
+
+def _check_trading_enabled(config_client: DynamoClient) -> None:
+    """
+    Raise RuntimeError if the kill switch has been flipped.
+
+    Flip via:
+        aws dynamodb put-item --table-name omaha-oracle-prod-config \
+          --item '{"pk":{"S":"config"},"sk":{"S":"trading_enabled"},"value":{"BOOL":false}}'
+    """
+    item = config_client.get_item({"pk": "config", "sk": "trading_enabled"})
+    if item is not None and item.get("value") is False:
+        raise RuntimeError(
+            "Trading is disabled via kill switch (config.trading_enabled=false). "
+            "Set value to true to resume."
+        )
 
 
-def _safe_float(val: Any) -> float:
-    if val is None:
-        return 0.0
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _safe_int(val: Any) -> int:
-    if val is None:
-        return 0
-    try:
-        return int(float(val))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _load_portfolio_state(portfolio_client: DynamoClient) -> dict[str, Any]:
-    """Build portfolio_state from portfolio table."""
-    account = portfolio_client.get_item({"pk": PK_ACCOUNT, "sk": SK_SUMMARY})
-    cash = _safe_float(account.get("cash_available", 0)) if account else 0.0
-    total = _safe_float(account.get("portfolio_value", 0)) if account else 0.0
-
-    positions_raw = portfolio_client.query(
-        Key("pk").eq(PK_POSITION),
-        limit=100,
-    )
-    positions: list[dict[str, Any]] = []
-    sector_value: dict[str, float] = {}
-
-    for item in positions_raw:
-        ticker = item.get("sk") or item.get("ticker", "")
-        mv = _safe_float(item.get("market_value", 0))
-        shares = _safe_float(item.get("shares", 0))
-        sector = item.get("sector", "Unknown")
-        positions.append({
-            "ticker": ticker,
-            "market_value": mv,
-            "shares": shares,
-            "sector": sector,
-            "cost_basis": _safe_float(item.get("cost_basis", 0)),
-            "purchase_date": item.get("purchase_date"),
-        })
-        sector_value[sector] = sector_value.get(sector, 0) + mv
-
-    if total <= 0 and positions:
-        total = sum(p.get("market_value", 0) for p in positions) + cash
-    if total <= 0:
-        total = cash
-
-    sector_exposure = {
-        s: v / total if total > 0 else 0.0
-        for s, v in sector_value.items()
-    }
-
-    return {
-        "portfolio_value": total,
-        "cash_available": cash,
-        "positions": positions,
-        "sector_exposure": sector_exposure,
-    }
-
-
-def _load_latest_analysis(
+def _load_moat_history(
     analysis_client: DynamoClient,
     ticker: str,
-) -> dict[str, Any] | None:
-    """Fetch and merge latest analysis for a ticker."""
+    quarters: int = 2,
+) -> list[dict[str, Any]]:
+    """Return the last *quarters* moat scores for *ticker* from the analysis table."""
     items = analysis_client.query(
         Key("ticker").eq(ticker),
         scan_forward=False,
-        limit=20,
+        limit=quarters * 5,  # over-fetch to handle multiple records per quarter
     )
-    if not items:
-        return None
-
-    # Group by date (prefix of analysis_date)
-    by_date: dict[str, list[dict[str, Any]]] = {}
+    seen_dates: set[str] = set()
+    history: list[dict[str, Any]] = []
     for item in items:
         sk = item.get("analysis_date", "")
         date_part = sk.split("#")[0] if "#" in sk else sk
-        if date_part not in by_date:
-            by_date[date_part] = []
-        by_date[date_part].append(item)
-
-    latest_date = max(by_date.keys()) if by_date else ""
-    if not latest_date:
-        return None
-
-    merged: dict[str, Any] = {"ticker": ticker, "sector": "Unknown"}
-    for item in by_date[latest_date]:
+        if date_part in seen_dates:
+            continue
         result = item.get("result") or {}
-        if isinstance(result, dict):
-            merged.update(result)
-        merged["moat_score"] = merged.get("moat_score") or item.get("moat_score")
-        merged["management_score"] = (
-            merged.get("management_score") or item.get("management_score")
+        moat = item.get("moat_score") or (
+            result.get("moat_score") if isinstance(result, dict) else None
         )
-        merged["sector"] = merged.get("sector") or item.get("sector", "Unknown")
-
-    return merged
+        if moat is not None:
+            seen_dates.add(date_part)
+            history.append({"date": date_part, "moat_score": moat})
+            if len(history) >= quarters:
+                break
+    return history
 
 
 def _load_buy_candidates(
     analysis_client: DynamoClient,
     watchlist_client: DynamoClient,
     event: dict[str, Any],
+    analysis_cache: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Get buy candidates: either from event or by scanning watchlist + analysis."""
     if "tickers" in event and event["tickers"]:
@@ -156,7 +98,9 @@ def _load_buy_candidates(
     for ticker in tickers:
         if not ticker:
             continue
-        analysis = _load_latest_analysis(analysis_client, ticker)
+        if ticker not in analysis_cache:
+            analysis_cache[ticker] = load_latest_analysis(analysis_client._table_name, ticker)
+        analysis = analysis_cache[ticker]
         if analysis:
             candidates.append(analysis)
     return candidates
@@ -176,6 +120,7 @@ def _log_decision(
         "decision_id": decision_id,
         "timestamp": timestamp,
         "decision_type": decision_type,
+        "record_type": "DECISION",
         "ticker": ticker,
         "signal": signal,
         "payload": payload,
@@ -202,15 +147,19 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         decisions_logged: count
     """
     cfg = get_config()
-    portfolio_client = DynamoClient(cfg.table_portfolio)
+    config_client = DynamoClient(cfg.table_config)
+    _check_trading_enabled(config_client)
+
     analysis_client = DynamoClient(cfg.table_analysis)
     watchlist_client = DynamoClient(cfg.table_watchlist)
     decisions_client = DynamoClient(cfg.table_decisions)
 
     thresholds = event.get("thresholds") or {}
 
-    portfolio_state = _load_portfolio_state(portfolio_client)
-    buy_candidates = _load_buy_candidates(analysis_client, watchlist_client, event)
+    portfolio_state = load_portfolio_state(cfg.table_portfolio)
+    # Shared cache: avoids repeated DynamoDB reads for the same ticker across buy + sell loops
+    analysis_cache: dict[str, Any] = {}
+    buy_candidates = _load_buy_candidates(analysis_client, watchlist_client, event, analysis_cache)
 
     buy_decisions: list[dict[str, Any]] = []
     sell_decisions: list[dict[str, Any]] = []
@@ -227,7 +176,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         if signal == "BUY":
             # Position size
-            mos = _safe_float(analysis.get("margin_of_safety", 0.3))
+            mos = safe_float(analysis.get("margin_of_safety", 0.3))
             win_prob = min(0.9, max(0.5, 0.5 + mos))
             win_loss = 2.0
             sizing = calculate_position_size(
@@ -265,12 +214,13 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if not ticker:
             continue
 
-        analysis = _load_latest_analysis(analysis_client, ticker)
+        if ticker not in analysis_cache:
+            analysis_cache[ticker] = load_latest_analysis(cfg.table_analysis, ticker)
+        analysis = analysis_cache[ticker]
         if not analysis:
             continue
 
-        moat_history = []
-        # Could fetch moat history from analysis table for prior quarters
+        moat_history = _load_moat_history(analysis_client, ticker)
         sell_result = evaluate_sell(
             ticker,
             position,

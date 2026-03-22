@@ -1,5 +1,4 @@
 import boto3
-from decimal import Decimal
 from boto3.dynamodb.conditions import Key
 
 db = boto3.resource("dynamodb")

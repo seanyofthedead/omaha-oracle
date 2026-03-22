@@ -4,9 +4,14 @@ Position sizing via Half-Kelly criterion.
 f* = (bp - q) / 2b
   p = win probability, q = 1-p, b = win/loss ratio
 """
+
 from __future__ import annotations
 
 from typing import Any
+
+from shared.logger import get_logger
+
+_log = get_logger(__name__)
 
 
 def calculate_position_size(
@@ -47,6 +52,28 @@ def calculate_position_size(
     q = 1.0 - win_probability
     b = max(win_loss_ratio, 0.01)
 
+    # Guard: min_position_usd exceeds the max allowed dollar size → cannot satisfy both constraints
+    max_usd_check = portfolio_value * max_position_pct if portfolio_value > 0 else 0.0
+    if min_position_usd > max_usd_check and portfolio_value > 0:
+        _log.warning(
+            "min_position_usd exceeds max allowed size; skipping position",
+            extra={
+                "min_position_usd": min_position_usd,
+                "max_usd": max_usd_check,
+                "portfolio_value": portfolio_value,
+            },
+        )
+        return {
+            "position_size_usd": 0.0,
+            "position_pct": 0.0,
+            "kelly_fraction": 0.0,
+            "can_buy": False,
+            "reasoning": (
+                f"min_position_usd ${min_position_usd:,.0f} exceeds "
+                f"max allowed ${max_usd_check:,.0f} ({max_position_pct:.0%} of portfolio)"
+            ),
+        }
+
     # Half-Kelly: f* = (bp - q) / 2b
     kelly_raw = (b * win_probability - q) / (2 * b)
     kelly_fraction = max(0.0, min(kelly_raw, max_position_pct))
@@ -56,7 +83,7 @@ def calculate_position_size(
     position_pct = position_size_usd / portfolio_value if portfolio_value > 0 else 0.0
 
     # Cap by max_position_pct
-    max_usd = portfolio_value * max_position_pct
+    max_usd = max_usd_check
     if position_size_usd > max_usd:
         position_size_usd = max_usd
         position_pct = max_position_pct
@@ -76,8 +103,7 @@ def calculate_position_size(
         reasons.append("Kelly fraction ≤ 0 (unfavourable odds)")
     else:
         reasons.append(
-            f"Half-Kelly f*={kelly_raw:.2%} → {kelly_fraction:.2%}, "
-            f"size=${position_size_usd:,.0f}"
+            f"Half-Kelly f*={kelly_raw:.2%} → {kelly_fraction:.2%}, size=${position_size_usd:,.0f}"
         )
 
     return {

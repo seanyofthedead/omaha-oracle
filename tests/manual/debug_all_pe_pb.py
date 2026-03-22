@@ -1,6 +1,8 @@
 import sys
+
 sys.path.insert(0, "src")
 import boto3
+
 from shared.config import get_config
 
 config = get_config()

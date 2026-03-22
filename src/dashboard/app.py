@@ -10,8 +10,10 @@ Run locally:
 
 For Lambda deployment, use a container (Streamlit is not ASGI/Mangum-compatible).
 """
+
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -21,37 +23,70 @@ if str(Path(__file__).resolve().parent.parent) not in sys.path:
 
 import streamlit as st
 
-from dashboard.pages import (
-    cost_tracker,
-    feedback_loop,
-    letters,
-    portfolio,
-    signals,
-    watchlist,
-)
+from dashboard.sidebar import render_sidebar
+from dashboard.styles import apply_custom_styles
 
-PAGES = {
-    "Portfolio Overview": portfolio,
-    "Watchlist": watchlist,
-    "Signals": signals,
-    "Cost Tracker": cost_tracker,
-    "Owner's Letters": letters,
-    "Feedback Loop": feedback_loop,
+_PAGE_MODULES = {
+    "Portfolio Overview": "dashboard.views.portfolio",
+    "Watchlist": "dashboard.views.watchlist",
+    "Signals": "dashboard.views.signals",
+    "Cost Tracker": "dashboard.views.cost_tracker",
+    "Owner's Letters": "dashboard.views.letters",
+    "Feedback Loop": "dashboard.views.feedback_loop",
+    "Upload Analysis": "dashboard.views.upload_analysis",
+    "Company Search": "dashboard.views.company_search",
 }
 
 
+def _require_auth() -> None:
+    """
+    Block access until the user provides the correct dashboard password.
+
+    Password is stored in .streamlit/secrets.toml:
+        dashboard_password = "your-password-here"
+
+    Session persists until the browser tab is closed or Streamlit restarts.
+    """
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if not st.session_state.authenticated:
+        _, center, _ = st.columns([1, 2, 1])
+        with center:
+            st.title("♠ Omaha Oracle")
+            st.caption("Portfolio Intelligence Dashboard")
+            with st.form("login_form"):
+                pwd = st.text_input(
+                    "Password",
+                    type="password",
+                    key="login_pwd",
+                    placeholder="Enter dashboard password",
+                )
+                submitted = st.form_submit_button("Login", use_container_width=True)
+            if submitted:
+                expected = st.secrets.get("dashboard_password", "")
+                if expected and pwd == expected:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
+        st.stop()
+
+
 def main() -> None:
+    """Configure the Streamlit app and render the selected page."""
     st.set_page_config(
-        page_title="Omaha Oracle",
-        page_icon="📊",
+        page_title="Omaha Oracle | Dashboard",
+        page_icon="♠",
         layout="wide",
         initial_sidebar_state="expanded",
     )
-    st.sidebar.title("Omaha Oracle")
-    st.sidebar.markdown("*Monitoring dashboard*")
+    apply_custom_styles()
+    _require_auth()
 
-    selection = st.sidebar.radio("Page", list(PAGES.keys()))
-    page = PAGES[selection]
+    selection = render_sidebar(list(_PAGE_MODULES.keys()))
+
+    page = importlib.import_module(_PAGE_MODULES[selection])
     page.render()
 
 

@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(pip show:*)",
+      "Bash(python:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff check:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(wc -l /c/Users/peder/Documents/omaha_oracle/src/shared/*.py)",
+      "Bash(gh auth:*)",
+      "Bash(pip install:*)",
+      "Bash(pip audit:*)",
+      "Bash(pip-audit:*)",
+      "Bash(ruff format:*)",
+      "Bash(git stash:*)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(PYTHONPATH=src python work-tmp/debug/screenshot_all.py 2>&1)",
+      "Bash(curl:*)",
+      "Bash(PYTHONPATH=src python work-tmp/debug/screenshot_page.py login 2>&1)",
+      "Bash(PYTHONPATH=src python work-tmp/debug/screenshot_page.py \"Portfolio Overview\" 2>&1)",
+      "Bash(PYTHONPATH=src python work-tmp/debug/screenshot_page.py \"Watchlist\" 2>&1)",
+      "Bash(PYTHONPATH=src python work-tmp/debug/screenshot_detail.py 2>&1)",
+      "Bash(PYTHONPATH=src python -c \"\nfrom dashboard.views import portfolio, watchlist, signals, cost_tracker, letters, feedback_loop\nprint\\('All view modules import successfully'\\)\n\" 2>&1)",
+      "Bash(PYTHONPATH=src python work-tmp/debug/screenshot_page.py all 2>&1)",
+      "Bash(pkill -f \"streamlit run\")",
+      "Bash(PYTHONPATH=src pytest tests/unit/ -x -q)",
+      "Bash(pip list:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(set -a)",
+      "Bash(source .env)",
+      "Bash(set +a)",
+      "Bash(git push:*)"
+    ]
+  }
+}

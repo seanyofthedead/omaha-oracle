@@ -7,6 +7,7 @@ End-to-end feedback loop integration test.
 - Verify LessonsClient loads and injects those lessons
 - Verify confidence adjustment factor applied to moat scores
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -15,15 +16,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
+from monitoring.owners_letter.audit import run_outcome_audit
+from monitoring.owners_letter.pipeline import extract_lessons
 from shared.dynamo_client import DynamoClient
 from shared.lessons_client import LessonsClient
-
-from monitoring.owners_letter.handler import (
-    _classify_outcome,
-    _extract_lessons,
-    _run_outcome_audit,
-)
 from tests.conftest import TABLE_DECISIONS, TABLE_LESSONS  # noqa: F401
 from tests.fixtures.mock_data import make_decision
 
@@ -41,6 +37,7 @@ def _seed_decision(table, decision: dict) -> None:
     item = {
         "pk": "DECISION",
         "sk": decision.get("decision_id", "dec-1"),
+        "record_type": "DECISION",
         "ticker": decision.get("ticker", ""),
         "signal": decision.get("signal", ""),
         "timestamp": decision.get("timestamp", ""),
@@ -69,11 +66,11 @@ class TestFeedbackLoopIntegration:
         _seed_decision(decisions_table, dec1)
 
         # Mock _fetch_price: BAD at 75 (BAD_BUY)
-        with patch("monitoring.owners_letter.handler._fetch_price") as mock_fetch:
+        with patch("monitoring.owners_letter.audit._fetch_price") as mock_fetch:
             mock_fetch.return_value = 75.0
 
             decisions_client = DynamoClient(TABLE_DECISIONS)
-            audits, summary = _run_outcome_audit(decisions_client, 2025, 1)
+            audits, summary = run_outcome_audit(decisions_client, 2025, 1)
 
         assert len(audits) >= 1
         assert any(a.get("outcome") == "BAD_BUY" for a in audits)
@@ -103,7 +100,7 @@ class TestFeedbackLoopIntegration:
 
         lessons_client = LessonsClient(table_name=TABLE_LESSONS)
         letter_md = "Mock letter content"
-        extracted = _extract_lessons(mock_llm, lessons_client, letter_md, audits, 2025, 1)
+        extracted = extract_lessons(mock_llm, lessons_client, letter_md, audits, 2025, 1)
 
         assert len(extracted) == 1
         assert extracted[0]["lesson_type"] == "moat_bias"
@@ -134,6 +131,7 @@ class TestFeedbackLoopIntegration:
             "created_at": now.isoformat(),
             "expires_at": expiry,
             "active": True,
+            "active_flag": "1",
         }
         lessons_table.put_item(Item=lesson_item)
 

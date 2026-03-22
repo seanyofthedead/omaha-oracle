@@ -40,9 +40,9 @@ _log = get_logger(__name__)
 
 _PRICING: dict[str, tuple[Decimal, Decimal]] = {
     # model-id-prefix              input $/1M   output $/1M
-    "claude-opus-4-20250514":     (Decimal("15.00"), Decimal("75.00")),
-    "claude-sonnet-4-20250514":   (Decimal("3.00"),  Decimal("15.00")),
-    "claude-haiku-4-5-20251001":  (Decimal("0.80"),  Decimal("4.00")),
+    "claude-opus-4-20250514": (Decimal("15.00"), Decimal("75.00")),
+    "claude-sonnet-4-20250514": (Decimal("3.00"), Decimal("15.00")),
+    "claude-haiku-4-5-20251001": (Decimal("0.80"), Decimal("4.00")),
 }
 
 # Fallback when the model string is unrecognised — use the most expensive
@@ -74,7 +74,10 @@ def compute_cost(model: str, input_tokens: int, output_tokens: int) -> Decimal:
 # Return-type for check_budget()                                      #
 # ------------------------------------------------------------------ #
 
+
 class BudgetStatus(TypedDict):
+    """Return value from :meth:`CostTracker.check_budget`."""
+
     budget_usd: float
     spent_usd: float
     remaining_usd: float
@@ -85,6 +88,7 @@ class BudgetStatus(TypedDict):
 # ------------------------------------------------------------------ #
 # CostTracker                                                         #
 # ------------------------------------------------------------------ #
+
 
 class CostTracker:
     """
@@ -99,13 +103,12 @@ class CostTracker:
     """
 
     def __init__(self, table_name: str | None = None) -> None:
+        """Initialize the tracker, defaulting to the configured cost-tracking table."""
         cfg = get_config()
         self._table_name = table_name or cfg.table_cost_tracking
         self._region = cfg.aws_region
         self._budget_usd = Decimal(str(cfg.monthly_budget_usd()))
-        self._table = boto3.resource("dynamodb", region_name=self._region).Table(
-            self._table_name
-        )
+        self._table = boto3.resource("dynamodb", region_name=self._region).Table(self._table_name)
 
     # ------------------------------------------------------------------ #
     # Public API                                                           #
@@ -216,6 +219,52 @@ class CostTracker:
             kwargs["ExclusiveStartKey"] = last_key
 
         return total.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+
+    def get_spend_history(self, month_keys: list[str]) -> dict[str, float]:
+        """
+        Return total USD spend for each key in *month_keys* using a single
+        table scan, rather than one Query per month.
+
+        Parameters
+        ----------
+        month_keys:
+            List of "YYYY-MM" strings.
+
+        Returns
+        -------
+        dict mapping month_key → total spend in USD (float).
+        Missing months are omitted from the result (caller should default to 0).
+        """
+        if not month_keys:
+            return {}
+
+        totals: dict[str, Decimal] = {}
+
+        for mk in month_keys:
+            kwargs: dict[str, object] = {
+                "KeyConditionExpression": Key("month_key").eq(mk),
+                "ProjectionExpression": "cost_usd",
+            }
+            while True:
+                try:
+                    response = self._table.query(**kwargs)  # type: ignore[arg-type]
+                except ClientError as exc:
+                    _log.error(
+                        "DynamoDB query failed for spend history",
+                        extra={"month_key": mk, "error": str(exc)},
+                    )
+                    raise
+
+                for item in response.get("Items", []):
+                    raw = item.get("cost_usd", Decimal("0"))
+                    totals[mk] = totals.get(mk, Decimal("0")) + Decimal(str(raw))
+
+                last_key = response.get("LastEvaluatedKey")
+                if not last_key:
+                    break
+                kwargs["ExclusiveStartKey"] = last_key
+
+        return {mk: float(total) for mk, total in totals.items()}
 
     def check_budget(self, month_key: str | None = None) -> BudgetStatus:
         """

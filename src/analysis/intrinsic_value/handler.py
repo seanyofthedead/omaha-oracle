@@ -3,13 +3,14 @@ Lambda handler for intrinsic value estimation.
 
 Pure math — no LLM. Three-scenario DCF + EPV + asset floor.
 """
+
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from shared.config import get_config
-from shared.dynamo_client import DynamoClient
+from shared.converters import normalize_ticker, safe_float
+from shared.dynamo_client import DynamoClient, store_analysis_result
 from shared.logger import get_logger
 
 _log = get_logger(__name__)
@@ -24,36 +25,28 @@ DEFAULT_MOS_THRESHOLD = 0.30
 
 # Bear / Base / Bull: (growth_rate, probability)
 SCENARIOS = [
-    (0.02, 0.25),   # Bear
-    (0.06, 0.50),   # Base
-    (0.10, 0.25),   # Bull
+    (0.02, 0.25),  # Bear
+    (0.06, 0.50),  # Base
+    (0.10, 0.25),  # Bull
 ]
 YEARS = 10
 
 
-def _safe_float(val: Any) -> float:
-    if val is None:
-        return 0.0
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return 0.0
-
-
 def _extract_inputs(metrics: dict[str, Any]) -> dict[str, float]:
     """Extract required values from metrics with flexible key names."""
+
     def get(*keys: str) -> float:
         for k in keys:
             v = metrics.get(k)
             if v is not None:
-                return _safe_float(v)
+                return safe_float(v)
         return 0.0
 
     owner_earnings = get("owner_earnings")
     if owner_earnings == 0:
         ni = get("net_income", "netIncome")
-        dep = get("depreciation", "depreciation")
-        capex = get("capex", "capex")
+        dep = get("depreciation")
+        capex = get("capex")
         owner_earnings = ni + dep - 0.7 * capex
 
     ca = get("current_assets", "currentAssets")
@@ -64,12 +57,12 @@ def _extract_inputs(metrics: dict[str, Any]) -> dict[str, float]:
 
     shares = get("shares_outstanding", "sharesOutstanding")
     if shares <= 0:
-        mcap = get("marketCap", "market_cap")
-        price = get("current_price", "currentPrice", "currentPrice")
+        mcap = get("market_cap", "marketCap")
+        price = get("current_price", "currentPrice")
         if mcap > 0 and price > 0:
             shares = mcap / price
 
-    price = get("current_price", "currentPrice", "currentPrice")
+    price = get("current_price", "currentPrice")
 
     return {
         "owner_earnings": owner_earnings,
@@ -102,7 +95,7 @@ def _load_mos_threshold(config_client: DynamoClient) -> float:
         return DEFAULT_MOS_THRESHOLD
     val = item.get("value")
     if isinstance(val, dict) and "margin_of_safety_threshold" in val:
-        return _safe_float(val["margin_of_safety_threshold"]) or DEFAULT_MOS_THRESHOLD
+        return safe_float(val["margin_of_safety_threshold"]) or DEFAULT_MOS_THRESHOLD
     return DEFAULT_MOS_THRESHOLD
 
 
@@ -118,21 +111,19 @@ def _resolve_metrics(event: dict[str, Any], cfg: Any) -> dict[str, Any]:
     if event.get("market_cap") is not None:
         metrics["market_cap"] = event["market_cap"]
 
-    ticker = (event.get("ticker") or "").strip().upper()
-    price = _safe_float(metrics.get("current_price") or metrics.get("currentPrice"))
-    mcap = _safe_float(metrics.get("market_cap") or metrics.get("marketCap"))
+    ticker = normalize_ticker(event)
+    price = safe_float(metrics.get("current_price") or metrics.get("currentPrice"))
+    mcap = safe_float(metrics.get("market_cap") or metrics.get("marketCap"))
 
     if (price <= 0 or mcap <= 0) and ticker:
         companies = DynamoClient(cfg.table_companies)
         company = companies.get_item({"ticker": ticker})
         if company:
             if price <= 0:
-                price = _safe_float(
-                    company.get("currentPrice") or company.get("regularMarketPrice")
-                )
+                price = safe_float(company.get("currentPrice") or company.get("regularMarketPrice"))
                 metrics["current_price"] = price
             if mcap <= 0:
-                mcap = _safe_float(company.get("marketCap"))
+                mcap = safe_float(company.get("marketCap"))
                 metrics["market_cap"] = mcap
 
     return metrics
@@ -146,7 +137,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     Output: input dict + intrinsic_value_per_share, margin_of_safety, buy_signal, scenarios, etc.
     """
     cfg = get_config()
-    ticker = (event.get("ticker") or "").strip().upper()
+    ticker = normalize_ticker(event)
     metrics = _resolve_metrics(event, cfg)
 
     if not ticker:
@@ -162,7 +153,14 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         _log.warning("No shares_outstanding — cannot compute per-share", extra={"ticker": ticker})
         result = _build_result(event, 0.0, 0.0, False, {}, price)
         result["metrics"] = metrics
-        _store_result(cfg, ticker, result)
+        result["error"] = "no_shares_outstanding"
+        store_analysis_result(
+            cfg.table_analysis,
+            ticker,
+            "intrinsic_value",
+            result,
+            result.get("buy_signal", False),
+        )
         return result
 
     # DCF scenarios
@@ -182,9 +180,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # Composite
     composite = (
-        DCF_WEIGHT * dcf_per_share
-        + EPV_WEIGHT * epv_per_share
-        + FLOOR_WEIGHT * floor_per_share
+        DCF_WEIGHT * dcf_per_share + EPV_WEIGHT * epv_per_share + FLOOR_WEIGHT * floor_per_share
     )
     composite = max(0.0, composite)
 
@@ -219,7 +215,13 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     result["mos_threshold"] = mos_threshold
     result["metrics"] = metrics  # Pass through resolved metrics for downstream
 
-    _store_result(cfg, ticker, result)
+    store_analysis_result(
+        cfg.table_analysis,
+        ticker,
+        "intrinsic_value",
+        result,
+        result.get("buy_signal", False),
+    )
     return result
 
 
@@ -241,18 +243,3 @@ def _build_result(
     out["current_price"] = price
     out.update(extra)
     return out
-
-
-def _store_result(cfg: Any, ticker: str, result: dict[str, Any]) -> None:
-    """Store intrinsic value result in analysis table."""
-    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
-    sk = f"{date_str}#intrinsic_value"
-    analysis = DynamoClient(cfg.table_analysis)
-    item = {
-        "ticker": ticker,
-        "analysis_date": sk,
-        "screen_type": "intrinsic_value",
-        "result": result,
-        "passed": result.get("buy_signal", False),
-    }
-    analysis.put_item(item)

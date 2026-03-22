@@ -9,20 +9,15 @@ Unit tests for post-mortem outcome audit.
 - Threshold adjustment safety: changes capped at 20%
 - Auto-apply only for MINOR severity
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from monitoring.owners_letter.handler import (
-    BAD_BUY_LOSS_PCT,
-    GOOD_SELL_DROP_PCT,
-    MAX_CHANGE_PCT_PER_QUARTER,
-    MISSED_OPP_RISE_PCT,
-    _apply_threshold_adjustments,
-    _classify_outcome,
-)
+from monitoring.owners_letter.audit import _classify_outcome
+from monitoring.owners_letter.pipeline import apply_threshold_adjustments
 
 
 class TestClassifyOutcome:
@@ -57,7 +52,10 @@ class TestApplyThresholdAdjustments:
 
     def test_changes_capped_at_20_pct(self):
         config_client = MagicMock()
-        config_client.get_item.return_value = {"config_key": "screening_thresholds", "value": {"pe_max": 15.0}}
+        config_client.get_item.return_value = {
+            "config_key": "screening_thresholds",
+            "value": {"pe_max": 15.0},
+        }
         lessons = [
             {
                 "severity": "minor",
@@ -65,22 +63,33 @@ class TestApplyThresholdAdjustments:
                 "lesson_id": "L1",
             },
         ]
-        auto_applied, flagged = _apply_threshold_adjustments(lessons, config_client)
+        auto_applied, flagged = apply_threshold_adjustments(lessons, config_client)
         assert len(auto_applied) == 1
         # 15 * 1.20 = 18 (capped), not 25
         assert auto_applied[0]["new_value"] == pytest.approx(18.0, rel=0.01)
 
     def test_auto_apply_only_for_minor_severity(self):
         config_client = MagicMock()
-        config_client.get_item.return_value = {"config_key": "screening_thresholds", "value": {"pe_max": 15.0}}
+        config_client.get_item.return_value = {
+            "config_key": "screening_thresholds",
+            "value": {"pe_max": 15.0},
+        }
         lessons_minor = [
-            {"severity": "minor", "threshold_adjustment": {"parameter": "pe_max", "proposed_value": 14.0}, "lesson_id": "L1"},
+            {
+                "severity": "minor",
+                "threshold_adjustment": {"parameter": "pe_max", "proposed_value": 14.0},
+                "lesson_id": "L1",
+            },
         ]
         lessons_moderate = [
-            {"severity": "moderate", "threshold_adjustment": {"parameter": "pe_max", "proposed_value": 14.0}, "lesson_id": "L2"},
+            {
+                "severity": "moderate",
+                "threshold_adjustment": {"parameter": "pe_max", "proposed_value": 14.0},
+                "lesson_id": "L2",
+            },
         ]
-        auto_minor, flagged_minor = _apply_threshold_adjustments(lessons_minor, config_client)
-        auto_mod, flagged_mod = _apply_threshold_adjustments(lessons_moderate, config_client)
+        auto_minor, flagged_minor = apply_threshold_adjustments(lessons_minor, config_client)
+        auto_mod, flagged_mod = apply_threshold_adjustments(lessons_moderate, config_client)
         assert len(auto_minor) == 1
         assert len(flagged_mod) == 1
         assert len(auto_mod) == 0
@@ -89,9 +98,13 @@ class TestApplyThresholdAdjustments:
         config_client = MagicMock()
         config_client.get_item.return_value = {"config_key": "screening_thresholds", "value": {}}
         lessons = [
-            {"severity": "moderate", "threshold_adjustment": {"parameter": "roic_min", "proposed_value": 15}, "lesson_id": "L1"},
+            {
+                "severity": "moderate",
+                "threshold_adjustment": {"parameter": "roic_min", "proposed_value": 15},
+                "lesson_id": "L1",
+            },
         ]
-        auto_applied, flagged = _apply_threshold_adjustments(lessons, config_client)
+        auto_applied, flagged = apply_threshold_adjustments(lessons, config_client)
         assert len(auto_applied) == 0
         assert len(flagged) == 1
         assert flagged[0]["severity"] == "moderate"
@@ -101,10 +114,10 @@ class TestAuditSummary:
     """Audit summary statistics."""
 
     def test_audit_summary_mistake_rate_and_sector(self):
-        from monitoring.owners_letter.handler import _run_outcome_audit
+        from monitoring.owners_letter.audit import run_outcome_audit
 
         decisions_client = MagicMock()
-        decisions_client.scan_all.return_value = [
+        decisions_client.query.return_value = [
             {
                 "decision_id": "d1",
                 "ticker": "BAD",
@@ -113,9 +126,9 @@ class TestAuditSummary:
                 "payload": {"price_at_decision": 100.0, "moat_score": 7},
             },
         ]
-        with patch("monitoring.owners_letter.handler._fetch_price") as mock_fetch:
+        with patch("monitoring.owners_letter.audit._fetch_price") as mock_fetch:
             mock_fetch.side_effect = lambda t, d=None: 75.0 if t == "BAD" else 0.0
-            audits, summary = _run_outcome_audit(decisions_client, 2025, 1)
+            audits, summary = run_outcome_audit(decisions_client, 2025, 1)
         assert summary["total_decisions"] == 1
         assert summary["mistake_rate"] == 1.0
         assert "sector_mistakes" in summary

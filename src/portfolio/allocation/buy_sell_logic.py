@@ -6,10 +6,16 @@ BUY: requires ALL of MoS > 30%, moat ≥ 7, mgmt ≥ 6, cash, concentration limi
 SELL: only for thesis broken, extreme overvaluation, fraud. Never for price decline,
       earnings miss, market panic, macro fear. 1-year min hold unless thesis broken.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+
+from shared.converters import safe_float, safe_int
+from shared.logger import get_logger
+
+_log = get_logger(__name__)
 
 DEFAULT_THRESHOLDS = {
     "mos_min": 0.30,
@@ -23,24 +29,6 @@ DEFAULT_THRESHOLDS = {
     "moat_broken_quarters": 2,
     "min_holding_days": 365,
 }
-
-
-def _safe_float(val: Any) -> float:
-    if val is None:
-        return 0.0
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _safe_int(val: Any) -> int:
-    if val is None:
-        return 0
-    try:
-        return int(float(val))
-    except (TypeError, ValueError):
-        return 0
 
 
 def evaluate_buy(
@@ -66,26 +54,26 @@ def evaluate_buy(
     reasons_pass: list[str] = []
     reasons_fail: list[str] = []
 
-    mos = _safe_float(analysis.get("margin_of_safety", 0))
+    mos = safe_float(analysis.get("margin_of_safety", 0))
     if mos > th["mos_min"]:
         reasons_pass.append(f"MoS {mos:.1%} > {th['mos_min']:.0%}")
     else:
         reasons_fail.append(f"MoS {mos:.1%} ≤ {th['mos_min']:.0%}")
 
-    moat = _safe_int(analysis.get("moat_score", 0))
+    moat = safe_int(analysis.get("moat_score", 0))
     if moat >= th["moat_min"]:
         reasons_pass.append(f"moat {moat} ≥ {th['moat_min']}")
     else:
         reasons_fail.append(f"moat {moat} < {th['moat_min']}")
 
-    mgmt = _safe_int(analysis.get("management_score", 0))
+    mgmt = safe_int(analysis.get("management_score", 0))
     if mgmt >= th["mgmt_min"]:
         reasons_pass.append(f"mgmt {mgmt} ≥ {th['mgmt_min']}")
     else:
         reasons_fail.append(f"mgmt {mgmt} < {th['mgmt_min']}")
 
-    cash = _safe_float(portfolio_state.get("cash_available", 0))
-    portfolio_value = _safe_float(portfolio_state.get("portfolio_value", 0))
+    cash = safe_float(portfolio_state.get("cash_available", 0))
+    portfolio_value = safe_float(portfolio_state.get("portfolio_value", 0))
     if cash > 0 and portfolio_value > 0:
         reasons_pass.append(f"Cash ${cash:,.0f} available")
     else:
@@ -145,15 +133,16 @@ def evaluate_sell(
     th = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
     reasons: list[str] = []
 
-    purchase_date_str = position.get("purchase_date") or position.get("purchaseDate")
+    purchase_date_str = position.get("purchase_date")
     purchase_date: datetime | None = None
     if purchase_date_str:
         try:
-            purchase_date = datetime.fromisoformat(
-                str(purchase_date_str).replace("Z", "+00:00")
-            )
+            purchase_date = datetime.fromisoformat(str(purchase_date_str).replace("Z", "+00:00"))
         except (ValueError, TypeError):
-            pass
+            _log.debug(
+                "Could not parse purchase_date",
+                extra={"ticker": ticker, "purchase_date": purchase_date_str},
+            )
 
     min_hold = timedelta(days=th["min_holding_days"])
     now = datetime.now(UTC)
@@ -168,10 +157,7 @@ def evaluate_sell(
     if moat_history and len(moat_history) >= th["moat_broken_quarters"]:
         recent = sorted(moat_history, key=lambda x: x.get("date", ""), reverse=True)
         recent = recent[: th["moat_broken_quarters"]]
-        if all(
-            _safe_int(m.get("moat_score", 0)) < th["moat_thesis_broken"]
-            for m in recent
-        ):
+        if all(safe_int(m.get("moat_score", 0)) < th["moat_thesis_broken"] for m in recent):
             moat_broken = True
             reasons.append(
                 f"Thesis broken: moat < {th['moat_thesis_broken']} for "
@@ -179,8 +165,8 @@ def evaluate_sell(
             )
 
     # Extreme overvaluation: price > 150% of intrinsic value
-    iv = _safe_float(latest_analysis.get("intrinsic_value_per_share", 0))
-    price = _safe_float(
+    iv = safe_float(latest_analysis.get("intrinsic_value_per_share", 0))
+    price = safe_float(
         latest_analysis.get("current_price")
         or position.get("current_price")
         or position.get("market_value", 0) / max(1, position.get("shares", 1))
@@ -201,9 +187,7 @@ def evaluate_sell(
         reasons.append("Fraud red flags detected")
 
     # SELL only if one of the valid reasons AND (holding period ok OR thesis broken)
-    can_sell = (moat_broken or overvalued or fraud) and (
-        holding_period_ok or moat_broken
-    )
+    can_sell = (moat_broken or overvalued or fraud) and (holding_period_ok or moat_broken)
 
     if not can_sell:
         if not holding_period_ok and not moat_broken:
@@ -212,9 +196,7 @@ def evaluate_sell(
                 "HOLD unless thesis broken"
             )
         if not (moat_broken or overvalued or fraud):
-            reasons.append(
-                "No sell trigger (thesis intact, not overvalued, no fraud); HOLD"
-            )
+            reasons.append("No sell trigger (thesis intact, not overvalued, no fraud); HOLD")
 
     signal = "SELL" if can_sell else "HOLD"
     return {"signal": signal, "reasons": reasons}

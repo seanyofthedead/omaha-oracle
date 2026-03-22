@@ -3,13 +3,14 @@ Unit tests for CostTracker — Mock DynamoDB, test budget enforcement.
 
 Uses moto for DynamoDB mocking (see conftest).
 """
+
 from __future__ import annotations
 
 from decimal import Decimal
 
 import pytest
 
-from shared.cost_tracker import CostTracker, compute_cost
+from shared.cost_tracker import CostTracker
 
 TABLE_NAME = "omaha-oracle-dev-cost-tracking"
 

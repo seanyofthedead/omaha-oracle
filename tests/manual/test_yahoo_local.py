@@ -8,6 +8,7 @@ Run from project root:
 2. Calls the full_refresh handler — locally, DynamoDB/S3 writes will fail
    (expected); we treat boto3/botocore errors as "data fetch worked, AWS failed".
 """
+
 from __future__ import annotations
 
 import sys
@@ -18,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 import yfinance as yf
 from botocore.exceptions import BotoCoreError
+
+from ingestion.yahoo_finance.handler import handler
 
 # ------------------------------------------------------------------ #
 # 1. Standalone yfinance test                                          #
@@ -37,8 +40,6 @@ print()
 # 2. Handler call with full_refresh                                    #
 # ------------------------------------------------------------------ #
 print("--- Calling handler with full_refresh ---")
-from ingestion.yahoo_finance.handler import handler
-
 event = {"action": "full_refresh", "ticker": "AAPL"}
 try:
     result = handler(event, context=None)

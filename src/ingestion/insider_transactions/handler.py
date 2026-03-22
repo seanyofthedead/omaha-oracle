@@ -4,17 +4,21 @@ Lambda handler for SEC EDGAR Form 4 (insider transaction) ingestion.
 Scans Form 4 filings across the watchlist for the last 30 days.
 Stores raw filing data to S3 and flags significant insider buys (> $100K).
 """
+
 from __future__ import annotations
 
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import requests
 
 from shared.config import get_config
-from shared.dynamo_client import DynamoClient
+from shared.converters import check_failure_threshold
+from shared.dynamo_client import get_watchlist_tickers
+from shared.http_client import TIMEOUT, get_session
 from shared.logger import get_logger
 from shared.s3_client import S3Client
 
@@ -38,7 +42,7 @@ def _cik_pad(cik: int | str) -> str:
 
 def _fetch(url: str, headers: dict[str, str]) -> requests.Response:
     _rate_limit()
-    resp = requests.get(url, headers=headers, timeout=30)
+    resp = get_session().get(url, headers=headers, timeout=TIMEOUT)
     resp.raise_for_status()
     return resp
 
@@ -58,11 +62,6 @@ def _get_ticker_to_cik(user_agent: str) -> dict[str, str]:
             if ticker and cik is not None:
                 out[str(ticker).upper()] = _cik_pad(cik)
     return out
-
-
-def _get_watchlist_tickers(dynamo: DynamoClient) -> list[str]:
-    items = dynamo.scan_all(projection_expression="ticker")
-    return [i["ticker"] for i in items if i.get("ticker")]
 
 
 def _accn_to_path(accn: str) -> str:
@@ -106,7 +105,10 @@ def _is_significant_buy(xml_content: str) -> bool:
                 price = float(price_m.group(1))
                 total_acquired_value += shares * price
             except ValueError:
-                pass
+                _log.warning(
+                    "Failed to parse shares/price in Form 4",
+                    extra={"shares_raw": shares_m.group(1), "price_raw": price_m.group(1)},
+                )
 
     return total_acquired_value >= SIGNIFICANT_BUY_THRESHOLD
 
@@ -198,13 +200,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     Scans Form 4 filings for all watchlist tickers in the last 30 days.
     """
     cfg = get_config()
-    watchlist = DynamoClient(cfg.table_watchlist)
     s3 = S3Client()
-    user_agent = cfg.sec_user_agent
+    user_agent = cfg.get_sec_user_agent()
 
     cutoff = datetime.now(UTC) - timedelta(days=LOOKBACK_DAYS)
     ticker_to_cik = _get_ticker_to_cik(user_agent)
-    tickers = _get_watchlist_tickers(watchlist)
+    tickers = get_watchlist_tickers(cfg.table_watchlist)
 
     if not tickers:
         _log.warning("Watchlist empty")
@@ -214,18 +215,30 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     total_significant = 0
     errors: list[str] = []
 
-    for ticker in tickers:
+    def _fetch_one(ticker: str) -> tuple[str, int, int]:
         cik = ticker_to_cik.get(ticker)
         if not cik:
-            errors.append(f"{ticker}: CIK not found")
-            continue
-        try:
-            stored, sig = _process_ticker(ticker, cik, user_agent, s3, cutoff)
-            total_stored += stored
-            total_significant += sig
-        except Exception as exc:
-            errors.append(f"{ticker}: {exc}")
-            _log.exception("Failed to process ticker", extra={"ticker": ticker})
+            raise ValueError(f"CIK not found for {ticker}")
+        stored, sig = _process_ticker(ticker, cik, user_agent, s3, cutoff)
+        return ticker, stored, sig
+
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = {ex.submit(_fetch_one, t): t for t in tickers}
+        for fut in as_completed(futures):
+            t = futures[fut]
+            exc = fut.exception()
+            if exc:
+                errors.append(f"{t}: {exc}")
+                _log.exception(
+                    "Ingestion failed",
+                    extra={"ticker": t, "stage": "form4_fetch", "error_type": type(exc).__name__},
+                )
+            else:
+                _, stored, sig = fut.result()
+                total_stored += stored
+                total_significant += sig
+
+    check_failure_threshold(errors, len(tickers), "Insider transactions")
 
     return {
         "status": "ok",

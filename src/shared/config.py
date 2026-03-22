@@ -16,24 +16,27 @@ from functools import lru_cache
 from typing import Any
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_ssm_cache: dict[str, str] = {}
 _log = logging.getLogger(__name__)
 
+_SSM_CONFIG = BotocoreConfig(retries={"mode": "adaptive", "max_attempts": 5})
 
+
+@lru_cache(maxsize=32)
 def _ssm_get(path: str, region: str) -> str | None:
-    """Fetch a single SecureString/String from SSM; returns None on any error."""
-    if path in _ssm_cache:
-        return _ssm_cache[path]
+    """Fetch a single SecureString/String from SSM; returns None on any error.
+
+    Results are cached up to 32 unique (path, region) pairs via lru_cache.
+    Call _ssm_get.cache_clear() in tests to reset between invocations.
+    """
     try:
-        client = boto3.client("ssm", region_name=region)
+        client = boto3.client("ssm", region_name=region, config=_SSM_CONFIG)
         resp = client.get_parameter(Name=path, WithDecryption=True)
-        value: str = resp["Parameter"]["Value"]
-        _ssm_cache[path] = value
-        return value
+        return resp["Parameter"]["Value"]
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
         if code != "ParameterNotFound":
@@ -137,10 +140,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
     # SEC EDGAR                                                            #
     # ------------------------------------------------------------------ #
-    sec_user_agent: str = Field(
-        default="OmahaOracle contact@example.com",
-        alias="SEC_USER_AGENT",
-    )
+    sec_user_agent: str = Field(default="", alias="SEC_USER_AGENT")
 
     # ------------------------------------------------------------------ #
     # Alerts / SNS                                                         #
@@ -207,9 +207,22 @@ class Settings(BaseSettings):
     def _ssm_path(self, param: str) -> str:
         return f"/omaha-oracle/{self.environment}/{param}"
 
+    def _raise_if_prod_env_var(self, key_name: str, ssm_path: str) -> None:
+        """Raise in prod when a secret is supplied as a plain env var.
+
+        In production, all API keys must come from SSM Parameter Store (not the
+        Lambda environment variable tab) to avoid exposing them in the AWS console.
+        """
+        if self.environment == "prod":
+            raise RuntimeError(
+                f"{key_name} must not be set as a Lambda env var in prod. "
+                f"Store it in SSM at {ssm_path} and unset the env var."
+            )
+
     def get_anthropic_key(self) -> str:
         """Return the Anthropic API key, falling back to SSM if not set."""
         if self.anthropic_api_key:
+            self._raise_if_prod_env_var("ANTHROPIC_API_KEY", self._ssm_path("anthropic-api-key"))
             return self.anthropic_api_key
         value = _ssm_get(self._ssm_path("anthropic-api-key"), self.aws_region)
         if value is None:
@@ -224,12 +237,15 @@ class Settings(BaseSettings):
         api_key = self.alpaca_api_key
         secret_key = self.alpaca_secret_key
 
+        if api_key:
+            self._raise_if_prod_env_var("ALPACA_API_KEY", self._ssm_path("alpaca-api-key"))
+        if secret_key:
+            self._raise_if_prod_env_var("ALPACA_SECRET_KEY", self._ssm_path("alpaca-secret-key"))
+
         if not api_key:
             api_key = _ssm_get(self._ssm_path("alpaca-api-key"), self.aws_region) or ""
         if not secret_key:
-            secret_key = (
-                _ssm_get(self._ssm_path("alpaca-secret-key"), self.aws_region) or ""
-            )
+            secret_key = _ssm_get(self._ssm_path("alpaca-secret-key"), self.aws_region) or ""
 
         if not api_key or not secret_key:
             raise RuntimeError(
@@ -241,12 +257,31 @@ class Settings(BaseSettings):
     def get_fred_key(self) -> str:
         """Return the FRED API key, falling back to SSM if not set."""
         if self.fred_api_key:
+            self._raise_if_prod_env_var("FRED_API_KEY", self._ssm_path("fred-api-key"))
             return self.fred_api_key
         value = _ssm_get(self._ssm_path("fred-api-key"), self.aws_region)
         if value is None:
             raise RuntimeError(
-                "FRED API key not found in environment or SSM "
-                f"({self._ssm_path('fred-api-key')})"
+                f"FRED API key not found in environment or SSM ({self._ssm_path('fred-api-key')})"
+            )
+        return value
+
+    def get_sec_user_agent(self) -> str:
+        """Return the SEC EDGAR User-Agent string, falling back to SSM if not set.
+
+        SEC EDGAR fair-use policy requires a real contact email in the User-Agent.
+        Store the value at /omaha-oracle/{env}/sec-user-agent in SSM, or set the
+        SEC_USER_AGENT environment variable directly.
+        """
+        if self.sec_user_agent:
+            return self.sec_user_agent
+        value = _ssm_get(self._ssm_path("sec-user-agent"), self.aws_region)
+        if value is None:
+            raise RuntimeError(
+                "SEC_USER_AGENT not found in environment or SSM "
+                f"({self._ssm_path('sec-user-agent')}). "
+                "Set it to a string like 'MyApp yourname@example.com' as required "
+                "by SEC EDGAR fair-use policy."
             )
         return value
 
@@ -255,6 +290,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ #
 
     def is_prod(self) -> bool:
+        """Return True when the active environment is production."""
         return self.environment == "prod"
 
     def monthly_budget_usd(self) -> float:
@@ -265,6 +301,7 @@ class Settings(BaseSettings):
         """Return every DynamoDB table name this application manages."""
         return [
             self.table_universe,
+            self.table_companies,
             self.table_financials,
             self.table_analysis,
             self.table_portfolio,
@@ -272,9 +309,13 @@ class Settings(BaseSettings):
             self.table_trades,
             self.table_macro,
             self.table_cost_tracking,
+            self.table_config,
+            self.table_watchlist,
+            self.table_lessons,
         ]
 
     def __repr__(self) -> str:
+        """Return a concise string representation showing key settings."""
         return (
             f"Settings(environment={self.environment!r}, "
             f"aws_region={self.aws_region!r}, "

@@ -3,6 +3,7 @@ Integration tests for SEC/Yahoo/FRED ingestion — real API calls.
 
 Mark as slow: pytest -m "not slow"
 """
+
 from __future__ import annotations
 
 import pytest
