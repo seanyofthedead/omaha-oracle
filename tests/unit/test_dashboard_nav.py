@@ -37,6 +37,8 @@ EXPECTED_PAGES = {
     "Cost Tracker": "dashboard.views.cost_tracker",
     "Owner's Letters": "dashboard.views.letters",
     "Feedback Loop": "dashboard.views.feedback_loop",
+    "Upload Analysis": "dashboard.views.upload_analysis",
+    "Company Search": "dashboard.views.company_search",
 }
 
 
@@ -77,6 +79,8 @@ class TestViewsDirectoryContents:
         "cost_tracker.py",
         "letters.py",
         "feedback_loop.py",
+        "upload_analysis.py",
+        "company_search.py",
     }
 
     def test_all_page_files_present(self):
@@ -115,8 +119,8 @@ class TestPageModuleMapping:
                 "This would import from the renamed directory and fail at runtime."
             )
 
-    def test_all_six_pages_registered(self):
-        assert len(self._get_page_modules()) == 6
+    def test_all_eight_pages_registered(self):
+        assert len(self._get_page_modules()) == 8
 
 
 # ---------------------------------------------------------------------------

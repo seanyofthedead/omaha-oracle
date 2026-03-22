@@ -25,6 +25,8 @@ _PAGE_ICONS = {
     "Cost Tracker": ":material/payments:",
     "Owner's Letters": ":material/mail:",
     "Feedback Loop": ":material/autorenew:",
+    "Upload Analysis": ":material/upload_file:",
+    "Company Search": ":material/search:",
 }
 
 

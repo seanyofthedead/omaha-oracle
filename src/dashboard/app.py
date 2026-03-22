@@ -33,6 +33,8 @@ _PAGE_MODULES = {
     "Cost Tracker": "dashboard.views.cost_tracker",
     "Owner's Letters": "dashboard.views.letters",
     "Feedback Loop": "dashboard.views.feedback_loop",
+    "Upload Analysis": "dashboard.views.upload_analysis",
+    "Company Search": "dashboard.views.company_search",
 }
 
 
@@ -49,16 +51,25 @@ def _require_auth() -> None:
         st.session_state.authenticated = False
 
     if not st.session_state.authenticated:
-        st.title("Omaha Oracle")
-        st.markdown("Enter the dashboard password to continue.")
-        pwd = st.text_input("Password", type="password", key="login_pwd")
-        if st.button("Login"):
-            expected = st.secrets.get("dashboard_password", "")
-            if expected and pwd == expected:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Incorrect password.")
+        _, center, _ = st.columns([1, 2, 1])
+        with center:
+            st.title("♠ Omaha Oracle")
+            st.caption("Portfolio Intelligence Dashboard")
+            with st.form("login_form"):
+                pwd = st.text_input(
+                    "Password",
+                    type="password",
+                    key="login_pwd",
+                    placeholder="Enter dashboard password",
+                )
+                submitted = st.form_submit_button("Login", use_container_width=True)
+            if submitted:
+                expected = st.secrets.get("dashboard_password", "")
+                if expected and pwd == expected:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
         st.stop()
 
 
