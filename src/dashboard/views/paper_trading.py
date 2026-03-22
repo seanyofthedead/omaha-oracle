@@ -2,8 +2,7 @@
 
 Serves as the entry point for all paper-trading features.  Shows the
 auth component and, once connected, the account overview, portfolio
-positions, order entry, and watchlists.  Additional sub-features
-(options, analytics) will be added by other worktrees.
+positions, order entry, watchlists, options, and analytics.
 """
 
 from __future__ import annotations
@@ -20,6 +19,7 @@ from dashboard.views.account_portfolio import (
     render_positions_table,
 )
 from dashboard.views.analytics import render_analytics
+from dashboard.views.options_ui import render_options
 from dashboard.watchlist_manager import (
     add_symbol,
     create_watchlist,
@@ -60,6 +60,10 @@ def render() -> None:
     st.divider()
 
     _render_watchlists(client)
+
+    st.divider()
+
+    render_options(client)
 
     st.divider()
 

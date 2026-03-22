@@ -85,6 +85,8 @@ class TestViewsDirectoryContents:
         "paper_trading.py",
         "account_portfolio.py",
         "analytics.py",
+        "order_entry.py",
+        "options_ui.py",
     }
 
     def test_all_page_files_present(self):

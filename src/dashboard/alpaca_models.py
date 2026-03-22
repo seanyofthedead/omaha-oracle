@@ -84,3 +84,22 @@ class WatchlistInfo:
     created_at: str = ""
     updated_at: str = ""
     symbols: list[str] = field(default_factory=list)
+
+
+@dataclass
+class OptionContractInfo:
+    """An options contract from the Alpaca chain."""
+
+    contract_id: str
+    symbol: str
+    underlying_symbol: str
+    expiration_date: str
+    strike_price: float
+    contract_type: str  # "call" or "put"
+    name: str = ""
+    style: str = "american"
+    tradable: bool = False
+    status: str = "active"
+    size: int = 100
+    open_interest: int = 0
+    close_price: float = 0.0
