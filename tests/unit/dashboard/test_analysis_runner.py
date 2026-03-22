@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 from dashboard.analysis_runner import (
@@ -305,3 +307,21 @@ class TestProgressTracking:
         assert cb.call_count == 2
         cb.assert_any_call("moat_analysis", 1)
         cb.assert_any_call("management_quality", 2)
+
+
+# ---------------------------------------------------------------------------
+# Production code hygiene
+# ---------------------------------------------------------------------------
+
+
+class TestCodeHygiene:
+    def test_no_unittest_imports_in_production(self):
+        """analysis_runner.py must not import from unittest — use DI instead."""
+        src_path = Path(__file__).resolve().parents[3] / "src" / "dashboard" / "analysis_runner.py"
+        tree = ast.parse(src_path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module and "unittest" in node.module:
+                raise AssertionError(
+                    f"analysis_runner.py imports from '{node.module}' at line {node.lineno}. "
+                    "Production code must not depend on test frameworks — use dependency injection."
+                )

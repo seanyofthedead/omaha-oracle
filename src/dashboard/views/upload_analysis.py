@@ -13,6 +13,9 @@ from dashboard.analysis_runner import (
 )
 from dashboard.upload_storage import extract_filing_text, store_uploaded_file
 from dashboard.upload_validator import UploadMetadata, validate_upload
+from shared.logger import get_logger
+
+_log = get_logger(__name__)
 
 
 def render() -> None:
@@ -101,6 +104,12 @@ def _handle_submission(
     # Extract filing context
     filing_context = extract_filing_text(file_bytes, uploaded.name, metadata)
 
+    if "not yet supported" in filing_context.lower():
+        st.warning(
+            "PDF text extraction is not yet supported. "
+            "Analysis will be based on metadata only."
+        )
+
     # Build extra metrics
     extra_metrics: dict[str, Any] = {}
     if sector.strip():
@@ -120,8 +129,9 @@ def _handle_submission(
             result = run_upload_analysis(event, filing_context, progress_callback=_progress)
             st.session_state.upload_result = result
             status.update(label="Analysis complete!", state="complete")
-        except Exception as exc:
-            st.error(f"Pipeline failed: {exc}")
+        except Exception:
+            _log.exception("Pipeline failed")
+            st.error("Analysis pipeline encountered an error. Please try again or check server logs.")
             status.update(label="Pipeline failed", state="error")
 
 
