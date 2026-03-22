@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "developing-with-streamlit": {
+      "source": "andfanilo/streamlit-echarts",
+      "sourceType": "github",
+      "computedHash": "813b7ba8b2f503ede55d7e133757dec6a71763b28c9ef51057744b63d76fd1e6"
+    },
+    "test-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "computedHash": "126f1ebf6ccd414f42544f6e83d8cc5adb089e1108eaffb7c400701e37eecd9f"
+    }
+  }
+}

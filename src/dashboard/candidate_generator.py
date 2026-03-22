@@ -26,10 +26,15 @@ _universe_cache: dict[str, str] | None = None
 MIN_MARKET_CAP = 1_000_000_000  # $1B
 
 
-def load_sec_universe(user_agent: str) -> dict[str, str]:
-    """Load the full SEC ticker-to-CIK universe, caching after first call."""
+def load_sec_universe(user_agent: str | None = None) -> dict[str, str]:
+    """Load the full SEC ticker-to-CIK universe, caching after first call.
+
+    If *user_agent* is None, it is resolved from ``get_config().get_sec_user_agent()``.
+    """
     global _universe_cache  # noqa: PLW0603
     if _universe_cache is None:
+        if user_agent is None:
+            user_agent = get_config().get_sec_user_agent()
         _universe_cache = _get_ticker_to_cik(user_agent)
     return _universe_cache
 
@@ -78,7 +83,7 @@ class CandidateGenerator:
     def generate_batch(self, batch_size: int = 10) -> list[str]:
         """Return the next batch of unevaluated tickers."""
         if self._shuffled is None:
-            universe = load_sec_universe("omaha-oracle/1.0 dashboard-search")
+            universe = load_sec_universe()
             tickers = [t for t in universe if t not in self._evaluated]
             self._rng.shuffle(tickers)
             self._shuffled = tickers
@@ -91,7 +96,7 @@ class CandidateGenerator:
 
     def get_cik(self, ticker: str) -> str | None:
         """Look up the CIK for a ticker from the cached universe."""
-        universe = load_sec_universe("omaha-oracle/1.0 dashboard-search")
+        universe = load_sec_universe()
         return universe.get(ticker)
 
 
