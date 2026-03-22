@@ -1,9 +1,9 @@
 """Paper Trading page — Alpaca paper-trading integration hub.
 
 Serves as the entry point for all paper-trading features.  Shows the
-auth component and, once connected, the account overview and portfolio
-positions.  Additional sub-features (order entry, watchlists, options,
-analytics) will be added by other worktrees.
+auth component and, once connected, the account overview, portfolio
+positions, and order entry.  Additional sub-features (watchlists,
+options, analytics) will be added by other worktrees.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import streamlit as st
 
 from dashboard.alpaca_auth import render_alpaca_auth
+from dashboard.views import order_entry
 from dashboard.views.account_portfolio import (
     render_account_overview,
     render_positions_table,
@@ -38,3 +39,7 @@ def render() -> None:
     st.divider()
 
     render_positions_table(client)
+
+    st.divider()
+
+    order_entry.render(client)
