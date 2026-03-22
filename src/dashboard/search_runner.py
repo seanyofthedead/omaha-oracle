@@ -296,7 +296,7 @@ def run_search(
             progress.update({
                 "evaluated_count": evaluated_count,
                 "match_count": match_count,
-                "results": results[:],
+                "results": results,
             })
 
     # Run thesis for qualifiers
@@ -316,7 +316,7 @@ def run_search(
     progress.update({
         "is_complete": True,
         "was_cancelled": cancel_event.is_set(),
-        "results": results[:],
+        "results": results,
         "evaluated_count": evaluated_count,
         "match_count": match_count,
         "elapsed_seconds": time.monotonic() - start_time,
