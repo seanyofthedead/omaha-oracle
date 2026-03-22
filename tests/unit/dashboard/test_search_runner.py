@@ -490,3 +490,58 @@ class TestRunSearch:
         assert len(near) == 1
         assert near[0].gates_passed_count == 2
         assert near[0].passed_all_gates is False
+
+
+# ---------------------------------------------------------------------------
+# C6: Progress results memory
+# ---------------------------------------------------------------------------
+
+
+class TestProgressResultsMemory:
+    @patch("dashboard.search_runner._run_pipeline_stages")
+    @patch("dashboard.search_runner.ingest_ticker_data")
+    @patch("dashboard.search_runner.pre_screen_ticker")
+    @patch("dashboard.search_runner.CandidateGenerator")
+    def test_progress_results_does_not_grow_unbounded(
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
+    ):
+        """After evaluating N tickers, progress['results'] must hold at most one
+        copy of the list, not N accumulated copies from results[:] slicing."""
+        result_list_ids: set[int] = set()
+
+        class TrackingDict(dict):
+            """Dict subclass that records object ids of lists stored under 'results'."""
+
+            def update(self, other):
+                if "results" in other:
+                    result_list_ids.add(id(other["results"]))
+                super().update(other)
+
+            def __setitem__(self, key, value):
+                if key == "results":
+                    result_list_ids.add(id(value))
+                super().__setitem__(key, value)
+
+        mock_gen = MagicMock()
+        tickers = [f"T{i}" for i in range(10)]
+        mock_gen.generate_batch.side_effect = [tickers, []]
+        mock_gen.get_cik.return_value = "0000000001"
+        mock_gen_cls.return_value = mock_gen
+
+        mock_pre.return_value = (True, {"marketCap": 5e9})
+        mock_ingest.return_value = True
+        mock_pipeline.side_effect = lambda t, d, f: _make_failing_pipeline(t)
+
+        progress = TrackingDict()
+        cancel = threading.Event()
+        config = SearchConfig(num_results=10, time_limit_minutes=60)
+
+        run_search(config, progress, cancel)
+
+        # With results[:] creating copies each iteration, we'd get 10+ distinct
+        # list ids.  With direct reference assignment, we should get at most 2
+        # (the loop reuses the same list object, plus possibly the final update).
+        assert len(result_list_ids) <= 2, (
+            f"Expected at most 2 distinct result lists, got {len(result_list_ids)}. "
+            f"results[:] is creating unnecessary copies each iteration."
+        )
