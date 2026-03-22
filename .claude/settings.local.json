@@ -33,7 +33,8 @@
       "Bash(source .env)",
       "Bash(set +a)",
       "Bash(git push:*)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }

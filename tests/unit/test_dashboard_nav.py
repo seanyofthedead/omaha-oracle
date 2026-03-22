@@ -84,6 +84,7 @@ class TestViewsDirectoryContents:
         "company_search.py",
         "paper_trading.py",
         "account_portfolio.py",
+        "analytics.py",
     }
 
     def test_all_page_files_present(self):

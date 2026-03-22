@@ -19,6 +19,7 @@ from dashboard.views.account_portfolio import (
     render_account_overview,
     render_positions_table,
 )
+from dashboard.views.analytics import render_analytics
 from dashboard.watchlist_manager import (
     add_symbol,
     create_watchlist,
@@ -59,6 +60,10 @@ def render() -> None:
     st.divider()
 
     _render_watchlists(client)
+
+    st.divider()
+
+    render_analytics(client)
 
 
 # ── Watchlists tab ────────────────────────────────────────────────────────
