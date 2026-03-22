@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from dashboard.data import DataLoadError, load_portfolio
@@ -9,7 +10,6 @@ from dashboard.fmt import (
     fmt_currency,
     fmt_currency_short,
     fmt_delta,
-    fmt_null,
     fmt_pct,
 )
 
@@ -18,8 +18,7 @@ def render() -> None:
     """Render the Portfolio Overview page."""
     st.title("Portfolio Overview")
     st.caption(
-        "Live positions, allocation, and risk guardrails — "
-        "powered by Alpaca brokerage data."
+        "Live positions, allocation, and risk guardrails — powered by Alpaca brokerage data."
     )
 
     try:
@@ -37,21 +36,16 @@ def render() -> None:
     total_cost = sum(p.get("cost_basis", 0) or 0 for p in positions)
     total_mv = sum(p.get("market_value", 0) or 0 for p in positions)
     total_gain = total_mv - total_cost
-    total_gain_pct = (
-        (total_gain / total_cost * 100) if total_cost > 0 else 0
-    )
+    total_gain_pct = (total_gain / total_cost * 100) if total_cost > 0 else 0
     cash_pct = (cash / total * 100) if total > 0 else 0
 
     # ── Tier 1: Hero metrics ──
-    col1, col2, col3, col4, col5 = st.columns(
-        5, gap="large", vertical_alignment="bottom"
-    )
+    col1, col2, col3, col4, col5 = st.columns(5, gap="large", vertical_alignment="bottom")
     with col1:
         st.metric(
             "Portfolio Value",
             fmt_currency_short(total),
-            help="Total market value of all holdings plus "
-            "uninvested cash.",
+            help="Total market value of all holdings plus uninvested cash.",
         )
     with col2:
         st.metric(
@@ -125,27 +119,35 @@ def render() -> None:
             {
                 "Ticker": p.get("ticker", ""),
                 "Shares": p.get("shares", 0),
-                "Cost Basis": fmt_currency(cost),
-                "Market Value": fmt_currency(mv),
-                "Gain/Loss": (
-                    f"{fmt_currency(gain)} ({fmt_delta(gain_pct)})"
-                ),
+                "Cost Basis": cost,
+                "Market Value": mv,
+                "Gain $": gain,
+                "Gain %": gain_pct,
                 "Sector": p.get("sector", ""),
-                "Thesis": fmt_null(p.get("thesis_link")),
             }
         )
+    pos_df = pd.DataFrame(pos_rows)
+    pos_column_config = {
+        "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+        "Shares": st.column_config.NumberColumn("Shares", format="%d"),
+        "Cost Basis": st.column_config.NumberColumn("Cost Basis", format="$%,.0f"),
+        "Market Value": st.column_config.NumberColumn("Market Value", format="$%,.0f"),
+        "Gain $": st.column_config.NumberColumn("Gain $", format="$%,.0f"),
+        "Gain %": st.column_config.NumberColumn("Gain %", format="%+.1f%%"),
+        "Sector": st.column_config.TextColumn("Sector"),
+    }
 
     # ── Tier 2: Primary content in tabs ──
-    tab_positions, tab_allocation = st.tabs(
-        ["Positions", "Allocation"]
-    )
+    tab_positions, tab_allocation = st.tabs(["Positions", "Allocation"])
 
     with tab_positions:
         with st.container(border=True):
             st.dataframe(
-                pos_rows,
+                pos_df,
+                column_config=pos_column_config,
                 use_container_width=True,
                 hide_index=True,
+                height=min(len(pos_rows) * 35 + 38, 400),
             )
 
     with tab_allocation:
@@ -153,9 +155,7 @@ def render() -> None:
         sector_mv: dict[str, float] = {}
         for p in positions:
             sector = p.get("sector", "Unknown") or "Unknown"
-            sector_mv[sector] = sector_mv.get(sector, 0) + (
-                p.get("market_value", 0) or 0
-            )
+            sector_mv[sector] = sector_mv.get(sector, 0) + (p.get("market_value", 0) or 0)
 
         if sector_mv:
             alloc_rows = []
@@ -191,15 +191,10 @@ def render() -> None:
             )
 
             # Sort ascending for horizontal bar (largest at top)
-            sorted_sectors = sorted(
-                sector_mv.items(), key=lambda x: x[1]
-            )
+            sorted_sectors = sorted(sector_mv.items(), key=lambda x: x[1])
             sectors = [s for s, _ in sorted_sectors]
             values = [v for _, v in sorted_sectors]
-            weights = [
-                (v / total * 100) if total > 0 else 0
-                for v in values
-            ]
+            weights = [(v / total * 100) if total > 0 else 0 for v in values]
 
             left, right = st.columns([2, 1], gap="medium")
             with left:
@@ -210,11 +205,7 @@ def render() -> None:
                             x=weights,
                             orientation="h",
                             marker_color=ACCENT_BLUE,
-                            hovertemplate=(
-                                "<b>%{y}</b><br>"
-                                "Weight: %{x:.1f}%"
-                                "<extra></extra>"
-                            ),
+                            hovertemplate=("<b>%{y}</b><br>Weight: %{x:.1f}%<extra></extra>"),
                         )
                     )
                     fig.add_vline(
@@ -226,18 +217,13 @@ def render() -> None:
                         annotation_font_color=MUTED_GRAY,
                     )
                     fig.update_layout(
-                        title=(
-                            "Sector Allocation"
-                            " — % of Portfolio (35% max)"
-                        ),
+                        title=("Sector Allocation — % of Portfolio (35% max)"),
                         xaxis_title=None,
                         yaxis_title=None,
                         xaxis_ticksuffix="%",
                         showlegend=False,
                     )
-                    st.plotly_chart(
-                        fig, use_container_width=True
-                    )
+                    st.plotly_chart(fig, use_container_width=True)
                     st.caption(
                         "Dashed line marks the 35% sector "
                         "concentration limit. Bars crossing "
@@ -251,11 +237,10 @@ def render() -> None:
                         alloc_rows,
                         use_container_width=True,
                         hide_index=True,
+                        height=min(len(alloc_rows) * 35 + 38, 300),
                     )
         else:
-            st.info(
-                "No sector data available for allocation chart."
-            )
+            st.info("No sector data available for allocation chart.")
 
     # ── Tier 3: Supplementary content ──
     st.divider()

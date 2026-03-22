@@ -67,10 +67,7 @@ def _friendly_aws_message(exc: Exception, resource: str) -> str:
                 "Run 'cdk deploy' to create infrastructure."
             )
         if code in ("AccessDeniedException", "UnauthorizedAccess"):
-            return (
-                f"Could not load {resource}: access denied. "
-                "Check your IAM permissions."
-            )
+            return f"Could not load {resource}: access denied. Check your IAM permissions."
         return f"Could not load {resource}: AWS error ({code}). Try again shortly."
     return f"Could not load {resource}: {type(exc).__name__}. Try again shortly."
 
@@ -103,9 +100,7 @@ def load_watchlist_analysis() -> list[dict[str, Any]]:
         tickers = [i.get("ticker", "").strip().upper() for i in watch_items if i.get("ticker")]
     except Exception as exc:
         _log.warning("load_watchlist_analysis failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "watchlist data")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "watchlist data")) from exc
 
     if not tickers:
         return []
@@ -162,9 +157,7 @@ def load_decisions(limit: int = 50) -> list[dict[str, Any]]:
         )
     except Exception as exc:
         _log.warning("load_decisions failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "buy/sell decisions")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "buy/sell decisions")) from exc
 
 
 @st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
@@ -190,9 +183,7 @@ def load_cost_data(months: int = 12) -> tuple[list[dict[str, Any]], dict[str, An
         return history, status
     except Exception as exc:
         _log.warning("load_cost_data failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "LLM cost data")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "LLM cost data")) from exc
 
 
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
@@ -205,9 +196,7 @@ def load_letter_keys() -> list[str]:
         return sorted(keys, reverse=True)
     except Exception as exc:
         _log.warning("load_letter_keys failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "owner's letter archive")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "owner's letter archive")) from exc
 
 
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
@@ -219,9 +208,7 @@ def load_letter_content(key: str) -> str:
         return s3.read_markdown(key)
     except Exception as exc:
         _log.warning("load_letter_content failed", extra={"key": key, "error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, f"letter '{key}'")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, f"letter '{key}'")) from exc
 
 
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
@@ -234,9 +221,7 @@ def load_postmortem_keys() -> list[str]:
         return sorted(keys, reverse=True)
     except Exception as exc:
         _log.warning("load_postmortem_keys failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "postmortem archive")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "postmortem archive")) from exc
 
 
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
@@ -248,9 +233,7 @@ def load_postmortem(key: str) -> dict[str, Any]:
         return s3.read_json(key)
     except Exception as exc:
         _log.warning("load_postmortem failed", extra={"key": key, "error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, f"postmortem '{key}'")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, f"postmortem '{key}'")) from exc
 
 
 @st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
@@ -266,9 +249,7 @@ def load_lessons() -> list[dict[str, Any]]:
         )
     except Exception as exc:
         _log.warning("load_lessons failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "active lessons")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "active lessons")) from exc
 
 
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
@@ -281,6 +262,4 @@ def load_config_thresholds() -> dict[str, Any]:
         return (item.get("value") or {}) if item else {}
     except Exception as exc:
         _log.warning("load_config_thresholds failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "screening thresholds")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "screening thresholds")) from exc

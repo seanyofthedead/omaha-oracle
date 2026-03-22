@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import streamlit as st
 
 from dashboard.data import (
@@ -9,6 +11,19 @@ from dashboard.data import (
     load_letter_content,
     load_letter_keys,
 )
+
+
+def _format_letter_key(key: str) -> str:
+    """Turn an S3 key like ``letters/2026-Q1-owners-letter.md`` into
+    ``Q1 2026 — Owner's Letter``."""
+    name = key.replace("letters/", "").replace(".md", "")
+    # Try to parse "YYYY-QN-..." pattern
+    m = re.match(r"(\d{4})-(Q\d)(.*)", name)
+    if m:
+        year, quarter, rest = m.groups()
+        label = rest.strip("-").replace("-", " ").title()
+        return f"{quarter} {year} — {label}" if label else f"{quarter} {year}"
+    return name
 
 
 def render() -> None:
@@ -29,15 +44,9 @@ def render() -> None:
 
     # ── Tier 1: Hero metrics ──
     n = len(keys)
-    latest = (
-        keys[0].replace("letters/", "").replace(".md", "")
-        if keys
-        else "—"
-    )
+    latest = keys[0].replace("letters/", "").replace(".md", "") if keys else "—"
 
-    col1, col2, _, _ = st.columns(
-        4, gap="large", vertical_alignment="bottom"
-    )
+    col1, col2, _, _ = st.columns(4, gap="large", vertical_alignment="bottom")
     with col1:
         st.metric(
             "Total Letters",
@@ -65,15 +74,12 @@ def render() -> None:
     selected = st.sidebar.selectbox(
         "Select letter",
         keys,
-        format_func=lambda k: k.replace("letters/", ""),
-        help="Choose a quarterly letter to read. "
-        "Most recent is selected by default.",
+        format_func=_format_letter_key,
+        help="Choose a quarterly letter to read. Most recent is selected by default.",
     )
 
     # ── Tier 2: Primary content in tabs ──
-    tab_letter, tab_archive = st.tabs(
-        ["Current Letter", "Archive Index"]
-    )
+    tab_letter, tab_archive = st.tabs(["Current Letter", "Archive Index"])
 
     with tab_letter:
         if selected:
@@ -87,9 +93,7 @@ def render() -> None:
 
     with tab_archive:
         for i, key in enumerate(keys):
-            label = (
-                key.replace("letters/", "").replace(".md", "")
-            )
+            label = _format_letter_key(key)
             is_current = key == selected
             prefix = "**>>** " if is_current else ""
             st.write(f"{prefix}{i + 1}. {label}")

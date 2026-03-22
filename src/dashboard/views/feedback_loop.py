@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from dashboard.data import (
@@ -24,40 +25,28 @@ def render() -> None:
     )
 
     # Load data for hero row and tabs (multi-step)
-    status = st.status(
-        "Loading feedback loop data...", expanded=False
-    )
+    status = st.status("Loading feedback loop data...", expanded=False)
 
     try:
-        status.update(
-            label="Fetching active lessons from DynamoDB..."
-        )
+        status.update(label="Fetching active lessons from DynamoDB...")
         lessons = load_lessons()
     except DataLoadError as exc:
-        status.update(
-            label="Failed to load lessons", state="error"
-        )
+        status.update(label="Failed to load lessons", state="error")
         st.error(str(exc))
         return
 
     try:
-        status.update(
-            label="Listing postmortem archive from S3..."
-        )
+        status.update(label="Listing postmortem archive from S3...")
         keys = load_postmortem_keys()
     except DataLoadError as exc:
-        status.update(
-            label="Failed to load postmortems", state="error"
-        )
+        status.update(label="Failed to load postmortems", state="error")
         st.error(str(exc))
         keys = []
 
     # Hero metric row
     n_lessons = len(lessons)
     conf_count = sum(
-        1
-        for lesson in lessons
-        if lesson.get("lesson_type") == "confidence_calibration"
+        1 for lesson in lessons if lesson.get("lesson_type") == "confidence_calibration"
     )
     n_postmortems = len(keys)
 
@@ -65,10 +54,7 @@ def render() -> None:
     latest_mr = fmt_null(None)
     if keys:
         try:
-            status.update(
-                label="Reading latest postmortem for mistake "
-                "rate..."
-            )
+            status.update(label="Reading latest postmortem for mistake rate...")
             pm = load_postmortem(keys[0])
             summary = pm.get("audit_summary") or {}
             mr = summary.get("mistake_rate")
@@ -80,14 +66,10 @@ def render() -> None:
         except DataLoadError:
             latest_mr = "err"
 
-    status.update(
-        label="Feedback loop data loaded", state="complete"
-    )
+    status.update(label="Feedback loop data loaded", state="complete")
 
     # ── Tier 1: Hero metrics ──
-    col1, col2, col3, col4 = st.columns(
-        4, gap="large", vertical_alignment="bottom"
-    )
+    col1, col2, col3, col4 = st.columns(4, gap="large", vertical_alignment="bottom")
     with col1:
         st.metric(
             "Active Lessons",
@@ -131,36 +113,39 @@ def render() -> None:
         if lessons:
             rows = []
             for lesson in lessons:
-                text = (
-                    lesson.get("prompt_injection_text")
-                    or lesson.get("description")
-                    or ""
-                )
+                text = lesson.get("prompt_injection_text") or lesson.get("description") or ""
                 rows.append(
                     {
                         "Type": lesson.get("lesson_type", ""),
                         "ID": lesson.get("lesson_id", ""),
                         "Severity": lesson.get("severity", ""),
-                        "Ticker": fmt_null(
-                            lesson.get("ticker", "")
-                            or None
-                        ),
+                        "Ticker": fmt_null(lesson.get("ticker", "") or None),
                         "Sector": lesson.get("sector", "ALL"),
-                        "Expires": fmt_date(
-                            lesson.get("expires_at")
-                        ),
-                        "Text": (
-                            (text[:60] + "...")
-                            if len(text) > 60
-                            else (text or fmt_null(None))
-                        ),
+                        "Expires": fmt_date(lesson.get("expires_at")),
+                        "Text": text or fmt_null(None),
                     }
                 )
+            lesson_df = pd.DataFrame(rows)
+            lesson_col_config = {
+                "Type": st.column_config.TextColumn("Type", width="small"),
+                "ID": st.column_config.TextColumn("ID", width="small"),
+                "Severity": st.column_config.TextColumn("Severity", width="small"),
+                "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+                "Sector": st.column_config.TextColumn("Sector", width="small"),
+                "Expires": st.column_config.TextColumn("Expires", width="small"),
+                "Text": st.column_config.TextColumn(
+                    "Text",
+                    width="large",
+                    help="Full lesson text injected into AI prompts during analysis.",
+                ),
+            }
             with st.container(border=True):
                 st.dataframe(
-                    rows,
+                    lesson_df,
+                    column_config=lesson_col_config,
                     use_container_width=True,
                     hide_index=True,
+                    height=min(len(rows) * 35 + 38, 400),
                 )
         else:
             st.info(
@@ -173,20 +158,11 @@ def render() -> None:
         if keys:
             from concurrent.futures import ThreadPoolExecutor
 
-            import pandas as pd
-
             batch = keys[:12]
             try:
-                with st.spinner(
-                    f"Loading {len(batch)} quarterly "
-                    "postmortems..."
-                ):
-                    with ThreadPoolExecutor(
-                        max_workers=len(batch)
-                    ) as ex:
-                        postmortems = list(
-                            ex.map(load_postmortem, batch)
-                        )
+                with st.spinner(f"Loading {len(batch)} quarterly postmortems..."):
+                    with ThreadPoolExecutor(max_workers=len(batch)) as ex:
+                        postmortems = list(ex.map(load_postmortem, batch))
             except DataLoadError as exc:
                 st.error(str(exc))
                 postmortems = []
@@ -196,9 +172,7 @@ def render() -> None:
                 summary = postmortem.get("audit_summary") or {}
                 q = postmortem.get("quarter", k)
                 rate = summary.get("mistake_rate", 0)
-                rates.append(
-                    {"quarter": q, "mistake_rate": rate}
-                )
+                rates.append({"quarter": q, "mistake_rate": rate})
             if rates:
                 import plotly.graph_objects as go
 
@@ -220,11 +194,7 @@ def render() -> None:
                                 "width": 2,
                             },
                             marker={"size": 6},
-                            hovertemplate=(
-                                "<b>%{x}</b><br>"
-                                "Mistake rate: %{y:.1%}"
-                                "<extra></extra>"
-                            ),
+                            hovertemplate=("<b>%{x}</b><br>Mistake rate: %{y:.1%}<extra></extra>"),
                         )
                     )
                     fig.add_hline(
@@ -236,18 +206,13 @@ def render() -> None:
                         annotation_font_color=MUTED_GRAY,
                     )
                     fig.update_layout(
-                        title=(
-                            "Mistake Rate by Quarter"
-                            " — Trending Toward Zero"
-                        ),
+                        title=("Mistake Rate by Quarter — Trending Toward Zero"),
                         xaxis_title=None,
                         yaxis_title=None,
                         yaxis_tickformat=".0%",
                         showlegend=False,
                     )
-                    st.plotly_chart(
-                        fig, use_container_width=True
-                    )
+                    st.plotly_chart(fig, use_container_width=True)
                     st.caption(
                         "Each point is one quarterly review. "
                         "A declining trend means the system is "
@@ -255,10 +220,7 @@ def render() -> None:
                         "better predictions over time."
                     )
             else:
-                st.info(
-                    "Postmortem files exist but contain no "
-                    "mistake rate data."
-                )
+                st.info("Postmortem files exist but contain no mistake rate data.")
         else:
             st.info(
                 "No postmortem reviews on record yet. The first "
@@ -281,31 +243,36 @@ def render() -> None:
                 "confidence by 0.75 before acting on it.'"
             )
         conf_lessons = [
-            lesson
-            for lesson in lessons
-            if lesson.get("lesson_type")
-            == "confidence_calibration"
+            lesson for lesson in lessons if lesson.get("lesson_type") == "confidence_calibration"
         ]
         if conf_lessons:
-            rows = [
+            cal_rows = [
                 {
                     "Stage": cal.get("analysis_stage", ""),
                     "Sector": cal.get("sector", "ALL"),
                     "Factor": cal.get("adjustment_factor", ""),
                 }
                 for lesson in conf_lessons
-                if (
-                    cal := lesson.get(
-                        "confidence_calibration"
-                    )
-                    or {}
-                )
+                if (cal := lesson.get("confidence_calibration") or {})
             ]
+            cal_df = pd.DataFrame(cal_rows)
+            cal_col_config = {
+                "Stage": st.column_config.TextColumn("Stage"),
+                "Sector": st.column_config.TextColumn("Sector"),
+                "Factor": st.column_config.NumberColumn(
+                    "Factor",
+                    format="%.2f",
+                    help="Multiplier applied to AI confidence. "
+                    "< 1.0 means the system was overconfident.",
+                ),
+            }
             with st.container(border=True):
                 st.dataframe(
-                    rows,
+                    cal_df,
+                    column_config=cal_col_config,
                     use_container_width=True,
                     hide_index=True,
+                    height=min(len(cal_rows) * 35 + 38, 300),
                 )
         else:
             st.info(
@@ -321,11 +288,18 @@ def render() -> None:
         try:
             thresholds = load_config_thresholds()
             if thresholds:
-                st.json(thresholds)
-            else:
-                st.info(
-                    "No threshold overrides configured. "
-                    "Using default screening thresholds."
+                thresh_rows = [{"Metric": k, "Value": v} for k, v in sorted(thresholds.items())]
+                st.dataframe(
+                    pd.DataFrame(thresh_rows),
+                    column_config={
+                        "Metric": st.column_config.TextColumn("Metric"),
+                        "Value": st.column_config.TextColumn("Value"),
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(len(thresh_rows) * 35 + 38, 400),
                 )
+            else:
+                st.info("No threshold overrides configured. Using default screening thresholds.")
         except DataLoadError as exc:
             st.error(str(exc))

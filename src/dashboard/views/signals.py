@@ -15,17 +15,9 @@ def _render_signal_card(d: dict) -> None:
     ts = fmt_datetime(d.get("timestamp"))
     payload = d.get("payload") or {}
 
-    color = (
-        "green"
-        if signal == "BUY"
-        else "red"
-        if signal == "SELL"
-        else "gray"
-    )
+    color = "green" if signal == "BUY" else "red" if signal == "SELL" else "gray"
     with st.container(border=True):
-        st.subheader(
-            f":{color}[{signal}]  {ticker}  —  {ts}"
-        )
+        st.subheader(f":{color}[{signal}]  {ticker}  —  {ts}")
 
         reasons = (
             payload.get("reasons_pass")
@@ -54,8 +46,7 @@ def render() -> None:
         10,
         100,
         30,
-        help="Number of recent decisions to display. "
-        "Increase to see older signals.",
+        help="Number of recent decisions to display. Increase to see older signals.",
     )
 
     try:
@@ -66,44 +57,26 @@ def render() -> None:
         return
 
     # Classify decisions
-    buy_decisions = [
-        d
-        for d in decisions
-        if (d.get("signal") or "").upper() == "BUY"
-    ]
-    sell_decisions = [
-        d
-        for d in decisions
-        if (d.get("signal") or "").upper() == "SELL"
-    ]
+    buy_decisions = [d for d in decisions if (d.get("signal") or "").upper() == "BUY"]
+    sell_decisions = [d for d in decisions if (d.get("signal") or "").upper() == "SELL"]
     other_decisions = [
-        d
-        for d in decisions
-        if (d.get("signal") or "").upper() not in ("BUY", "SELL")
+        d for d in decisions if (d.get("signal") or "").upper() not in ("BUY", "SELL")
     ]
-    latest_ts = (
-        fmt_date(decisions[0].get("timestamp"))
-        if decisions
-        else fmt_null(None)
-    )
+    latest_ts = fmt_date(decisions[0].get("timestamp")) if decisions else fmt_null(None)
 
     # ── Tier 1: Hero metrics ──
-    col1, col2, col3, col4 = st.columns(
-        4, gap="large", vertical_alignment="bottom"
-    )
+    col1, col2, col3, col4 = st.columns(4, gap="large", vertical_alignment="bottom")
     with col1:
         st.metric(
             "Total Signals",
             len(decisions),
-            help="All decisions in the selected range, "
-            "including buys, sells, and holds.",
+            help="All decisions in the selected range, including buys, sells, and holds.",
         )
     with col2:
         st.metric(
             "Buys",
             len(buy_decisions),
-            help="Stocks that passed all five pipeline "
-            "stages and met margin-of-safety thresholds.",
+            help="Stocks that passed all five pipeline stages and met margin-of-safety thresholds.",
         )
     with col3:
         st.metric(
@@ -157,9 +130,7 @@ def render() -> None:
     )
 
     # ── Tier 2: Primary content in tabs ──
-    tab_all, tab_buys, tab_sells = st.tabs(
-        ["All Signals", "Buys", "Sells"]
-    )
+    tab_all, tab_buys, tab_sells = st.tabs(["All Signals", "Buys", "Sells"])
 
     with tab_all:
         for d in decisions:
@@ -190,8 +161,6 @@ def render() -> None:
 
     # ── Tier 3: Supplementary content ──
     if other_decisions:
-        with st.expander(
-            f"Other Signals ({len(other_decisions)})"
-        ):
+        with st.expander(f"Other Signals ({len(other_decisions)})"):
             for d in other_decisions:
                 _render_signal_card(d)

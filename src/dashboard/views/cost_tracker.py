@@ -23,14 +23,11 @@ def render() -> None:
         3,
         24,
         12,
-        help="How many months of spend history to display "
-        "in the trend chart and breakdown table.",
+        help="How many months of spend history to display in the trend chart and breakdown table.",
     )
 
     try:
-        with st.spinner(
-            "Loading LLM spend history and budget status..."
-        ):
+        with st.spinner("Loading LLM spend history and budget status..."):
             history, status = load_cost_data(months=months)
     except DataLoadError as exc:
         st.error(str(exc))
@@ -42,9 +39,7 @@ def render() -> None:
     util = status.get("utilization_pct", 0)
 
     # ── Tier 1: Hero metrics ──
-    col1, col2, col3, col4 = st.columns(
-        4, gap="large", vertical_alignment="bottom"
-    )
+    col1, col2, col3, col4 = st.columns(4, gap="large", vertical_alignment="bottom")
     with col1:
         st.metric(
             "Monthly Budget",
@@ -68,14 +63,9 @@ def render() -> None:
         st.metric(
             "Utilization",
             fmt_pct(util, 0),
-            delta=(
-                "EXHAUSTED" if status.get("exhausted") else None
-            ),
-            delta_color=(
-                "inverse" if status.get("exhausted") else "off"
-            ),
-            help="Percentage of monthly budget consumed. "
-            "Warning at 80%, full stop at 100%.",
+            delta=("EXHAUSTED" if status.get("exhausted") else None),
+            delta_color=("inverse" if status.get("exhausted") else "off"),
+            help="Percentage of monthly budget consumed. Warning at 80%, full stop at 100%.",
         )
 
     if status.get("exhausted"):
@@ -99,9 +89,7 @@ def render() -> None:
     st.divider()
 
     # ── Tier 2: Primary content in tabs ──
-    tab_trend, tab_breakdown = st.tabs(
-        ["Spend Trend", "Monthly Breakdown"]
-    )
+    tab_trend, tab_breakdown = st.tabs(["Spend Trend", "Monthly Breakdown"])
 
     with tab_trend:
         if history:
@@ -121,11 +109,7 @@ def render() -> None:
                         x=df["month"],
                         y=df["spent_usd"],
                         marker_color=ACCENT_BLUE,
-                        hovertemplate=(
-                            "<b>%{x}</b><br>"
-                            "Spent: $%{y:,.2f}"
-                            "<extra></extra>"
-                        ),
+                        hovertemplate=("<b>%{x}</b><br>Spent: $%{y:,.2f}<extra></extra>"),
                     )
                 )
                 if budget > 0:
@@ -164,9 +148,6 @@ def render() -> None:
 
             df = pd.DataFrame(history)
             df = df.sort_values("month", ascending=False)
-            df["spent_usd"] = df["spent_usd"].apply(
-                lambda x: fmt_currency(x, decimals=2)
-            )
             with st.container(border=True):
                 st.dataframe(
                     df.rename(
@@ -175,8 +156,13 @@ def render() -> None:
                             "spent_usd": "Spent",
                         }
                     ),
+                    column_config={
+                        "Month": st.column_config.TextColumn("Month"),
+                        "Spent": st.column_config.NumberColumn("Spent", format="$%,.2f"),
+                    },
                     use_container_width=True,
                     hide_index=True,
+                    height=min(len(history) * 35 + 38, 400),
                 )
         else:
             st.info(
