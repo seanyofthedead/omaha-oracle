@@ -14,12 +14,13 @@ import analysis.moat_analysis.handler as _moat_mod
 import analysis.thesis_generator.handler as _thesis_mod
 from analysis.quant_screen.screener import screen_company
 from dashboard.candidate_generator import (
-    CandidateGenerator,
+    SmartCandidateGenerator,
     ingest_ticker_data,
     pre_screen_ticker,
 )
 from dashboard.search_config import (
     MAX_EVALUATIONS,
+    SCREENER_MAX_RESULTS,
     SearchConfig,
     check_quality_gates,
     count_gates_passed,
@@ -198,21 +199,52 @@ def run_search(
 ) -> list[SearchResult]:
     """Run a company search, returning all evaluated results.
 
+    Uses a 3-tier funnel:
+      Tier 1: Yahoo Finance screener bulk filter
+      Tier 2: Composite scoring & ranking
+      Tier 3: Full pipeline (quant screen, moat, management, IV, thesis)
+
     Updates ``progress`` dict in-place for UI polling.
     Stops when: match_count >= num_results, time limit, hard cap, cancel, or exhaustion.
     """
     cfg = get_config()
     financials_client = DynamoClient(cfg.table_financials)
-    generator = CandidateGenerator(seed=int(time.time()))
 
+    # --- Tier 1 + 2: screener + ranking ---
+    progress.update(
+        {
+            "current_action": "Screening Yahoo Finance universe...",
+            "current_ticker": "",
+            "evaluated_count": 0,
+            "match_count": 0,
+            "elapsed_seconds": 0,
+        }
+    )
+
+    start_time = time.monotonic()
+    generator = SmartCandidateGenerator(max_screener_results=SCREENER_MAX_RESULTS)
+
+    # Trigger initialization (Tier 1 + 2) so we can report the count
+    generator.generate_batch(0)
+    progress.update(
+        {
+            "current_action": f"Ranked {generator.screener_count} pre-screened candidates",
+            "screener_count": generator.screener_count,
+            "elapsed_seconds": time.monotonic() - start_time,
+        }
+    )
+
+    if cancel_event.is_set():
+        progress.update({"is_complete": True, "was_cancelled": True, "results": []})
+        return []
+
+    # --- Tier 3: full pipeline on ranked candidates ---
     results: list[SearchResult] = []
     evaluated_count = 0
     match_count = 0
     time_limit_seconds = config.time_limit_minutes * 60
-    start_time = time.monotonic()
 
     while True:
-        # Check stop conditions
         if cancel_event.is_set():
             break
         if match_count >= config.num_results:
@@ -223,14 +255,12 @@ def run_search(
         if evaluated_count >= MAX_EVALUATIONS:
             break
 
-        # Get next batch
         batch = generator.generate_batch(10)
         if not batch:
             progress["candidates_exhausted"] = True
             break
 
         for ticker in batch:
-            # Re-check stop conditions
             if cancel_event.is_set():
                 break
             if match_count >= config.num_results:
@@ -241,16 +271,17 @@ def run_search(
             if evaluated_count >= MAX_EVALUATIONS:
                 break
 
-            # Update progress
-            progress.update({
-                "current_ticker": ticker,
-                "current_action": f"Pre-screening {ticker}",
-                "evaluated_count": evaluated_count,
-                "match_count": match_count,
-                "elapsed_seconds": elapsed,
-            })
+            progress.update(
+                {
+                    "current_ticker": ticker,
+                    "current_action": f"Pre-screening {ticker}",
+                    "evaluated_count": evaluated_count,
+                    "match_count": match_count,
+                    "elapsed_seconds": elapsed,
+                }
+            )
 
-            # Pre-screen
+            # Pre-screen (yfinance detail fetch)
             passed_prescreen, info = pre_screen_ticker(ticker)
             if not passed_prescreen:
                 continue
@@ -292,19 +323,19 @@ def run_search(
             if sr.passed_all_gates:
                 match_count += 1
 
-            # Update progress with results
-            progress.update({
-                "evaluated_count": evaluated_count,
-                "match_count": match_count,
-                "results": results,
-            })
+            progress.update(
+                {
+                    "evaluated_count": evaluated_count,
+                    "match_count": match_count,
+                    "results": results,
+                }
+            )
 
     # Run thesis for qualifiers
     qualifiers = [r for r in results if r.passed_all_gates]
     if qualifiers and not cancel_event.is_set():
         progress["current_action"] = "Generating investment theses..."
         qualifiers = _run_thesis_for_qualifiers(qualifiers)
-        # Update results list with thesis-enriched qualifiers
         qualifier_tickers = {q.ticker for q in qualifiers}
         results = [
             next(q for q in qualifiers if q.ticker == r.ticker)
@@ -313,13 +344,15 @@ def run_search(
             for r in results
         ]
 
-    progress.update({
-        "is_complete": True,
-        "was_cancelled": cancel_event.is_set(),
-        "results": results,
-        "evaluated_count": evaluated_count,
-        "match_count": match_count,
-        "elapsed_seconds": time.monotonic() - start_time,
-    })
+    progress.update(
+        {
+            "is_complete": True,
+            "was_cancelled": cancel_event.is_set(),
+            "results": results,
+            "evaluated_count": evaluated_count,
+            "match_count": match_count,
+            "elapsed_seconds": time.monotonic() - start_time,
+        }
+    )
 
     return results

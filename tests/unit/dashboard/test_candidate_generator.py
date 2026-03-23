@@ -1,14 +1,21 @@
-"""Tests for candidate generation and pre-screening."""
+"""Tests for candidate generation, smart screening, and pre-screening."""
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from dashboard.candidate_generator import (
-    CandidateGenerator,
+    SmartCandidateGenerator,
+    _score_de,
+    _score_fcf_yield,
+    _score_pb,
+    _score_pe,
+    _score_roe,
     ingest_ticker_data,
     load_sec_universe,
     pre_screen_ticker,
+    rank_candidates,
+    score_candidate,
 )
 
 # ---------------------------------------------------------------------------
@@ -96,45 +103,247 @@ class TestPreScreenTicker:
 
 
 # ---------------------------------------------------------------------------
-# B3: CandidateGenerator
+# B3: Individual scoring functions
 # ---------------------------------------------------------------------------
 
 
-class TestCandidateGenerator:
-    @patch("dashboard.candidate_generator.load_sec_universe")
-    def test_generate_batch_returns_requested_size(self, mock_universe):
-        mock_universe.return_value = {f"T{i}": f"CIK{i}" for i in range(100)}
-        gen = CandidateGenerator(seed=42)
-        batch = gen.generate_batch(10)
-        assert len(batch) == 10
+class TestScoringFunctions:
+    def test_score_pe_at_threshold(self):
+        assert _score_pe(15.0) == 0.0
 
-    @patch("dashboard.candidate_generator.load_sec_universe")
-    def test_generate_batch_skips_evaluated(self, mock_universe):
-        tickers = {f"T{i}": f"CIK{i}" for i in range(20)}
-        mock_universe.return_value = tickers
-        evaluated = {f"T{i}" for i in range(5)}
-        gen = CandidateGenerator(evaluated=evaluated, seed=42)
-        batch = gen.generate_batch(20)
-        for t in evaluated:
-            assert t not in batch
+    def test_score_pe_at_zero(self):
+        assert _score_pe(0.0) == 0.0  # pe <= 0 returns 0
 
-    @patch("dashboard.candidate_generator.load_sec_universe")
-    def test_generate_batch_exhaustion(self, mock_universe):
-        mock_universe.return_value = {"T0": "CIK0", "T1": "CIK1", "T2": "CIK2"}
-        gen = CandidateGenerator(evaluated={"T0", "T1", "T2"}, seed=42)
-        batch = gen.generate_batch(10)
-        assert batch == []
+    def test_score_pe_midpoint(self):
+        score = _score_pe(7.5)
+        assert 0.49 < score < 0.51  # should be ~0.5
 
-    @patch("dashboard.candidate_generator.load_sec_universe")
-    def test_generate_batch_deterministic_with_seed(self, mock_universe):
-        mock_universe.return_value = {f"T{i}": f"CIK{i}" for i in range(50)}
-        gen1 = CandidateGenerator(seed=123)
-        gen2 = CandidateGenerator(seed=123)
-        assert gen1.generate_batch(10) == gen2.generate_batch(10)
+    def test_score_pe_low(self):
+        assert _score_pe(3.0) > _score_pe(12.0)
+
+    def test_score_pe_negative(self):
+        assert _score_pe(-5.0) == 0.0
+
+    def test_score_pb_at_threshold(self):
+        assert _score_pb(1.5) == 0.0
+
+    def test_score_pb_midpoint(self):
+        score = _score_pb(0.75)
+        assert 0.49 < score < 0.51
+
+    def test_score_de_at_zero(self):
+        assert _score_de(0.0) == 1.0
+
+    def test_score_de_at_threshold(self):
+        assert _score_de(0.5) == 0.0
+
+    def test_score_de_negative(self):
+        assert _score_de(-0.1) == 0.0
+
+    def test_score_roe_at_threshold(self):
+        assert _score_roe(12.0) == 0.0
+
+    def test_score_roe_at_ceiling(self):
+        assert _score_roe(30.0) == 1.0
+
+    def test_score_roe_above_ceiling(self):
+        assert _score_roe(50.0) == 1.0  # capped at 1
+
+    def test_score_roe_midpoint(self):
+        score = _score_roe(21.0)
+        assert 0.49 < score < 0.51
+
+    def test_score_fcf_yield_zero_mcap(self):
+        assert _score_fcf_yield(1_000_000, 0) == 0.0
+
+    def test_score_fcf_yield_negative_fcf(self):
+        assert _score_fcf_yield(-100, 1_000_000) == 0.0
+
+    def test_score_fcf_yield_high(self):
+        # 10% yield = max score
+        assert _score_fcf_yield(100_000_000, 1_000_000_000) == 1.0
+
+    def test_score_fcf_yield_moderate(self):
+        # 5% yield = ~0.5
+        score = _score_fcf_yield(50_000_000, 1_000_000_000)
+        assert 0.49 < score < 0.51
 
 
 # ---------------------------------------------------------------------------
-# B4: ingest_ticker_data
+# B4: score_candidate
+# ---------------------------------------------------------------------------
+
+
+class TestScoreCandidate:
+    def test_score_perfect_candidate(self):
+        candidate = {
+            "trailingPE": 5.0,
+            "priceToBook": 0.5,
+            "debtToEquity": 10.0,  # 10% in percentage form
+            "returnOnEquity": 0.25,  # 25% as fraction
+            "leveredFreeCashflow": 100_000_000,
+            "marketCap": 1_000_000_000,
+        }
+        score = score_candidate(candidate)
+        assert score > 0.5  # Should be a high score
+
+    def test_score_borderline_candidate(self):
+        candidate = {
+            "trailingPE": 14.5,
+            "priceToBook": 1.4,
+            "debtToEquity": 48.0,  # 48% in percentage form
+            "returnOnEquity": 0.13,  # 13%
+            "leveredFreeCashflow": 1_000,
+            "marketCap": 1_000_000_000,
+        }
+        score = score_candidate(candidate)
+        assert 0 < score < 0.2  # Should be a low score
+
+    def test_score_missing_fields(self):
+        candidate = {"trailingPE": 8.0}
+        score = score_candidate(candidate)
+        # Should still produce a score from available fields
+        assert score > 0
+
+    def test_score_empty_candidate(self):
+        score = score_candidate({})
+        assert score == 0.0
+
+    def test_score_roe_percentage_form(self):
+        """ROE reported as 25 (percent) vs 0.25 (fraction) should give same score."""
+        c_pct = {"returnOnEquity": 25.0}
+        c_frac = {"returnOnEquity": 0.25}
+        assert abs(score_candidate(c_pct) - score_candidate(c_frac)) < 0.01
+
+    def test_better_candidate_scores_higher(self):
+        good = {
+            "trailingPE": 5.0,
+            "priceToBook": 0.5,
+            "debtToEquity": 5.0,
+            "returnOnEquity": 0.28,
+            "leveredFreeCashflow": 200_000_000,
+            "marketCap": 1_000_000_000,
+        }
+        bad = {
+            "trailingPE": 14.0,
+            "priceToBook": 1.4,
+            "debtToEquity": 45.0,
+            "returnOnEquity": 0.13,
+            "leveredFreeCashflow": 5_000_000,
+            "marketCap": 5_000_000_000,
+        }
+        assert score_candidate(good) > score_candidate(bad)
+
+
+# ---------------------------------------------------------------------------
+# B5: rank_candidates
+# ---------------------------------------------------------------------------
+
+
+class TestRankCandidates:
+    def test_rank_sorts_descending(self):
+        candidates = [
+            {"symbol": "BAD", "trailingPE": 14.0, "priceToBook": 1.4},
+            {"symbol": "GOOD", "trailingPE": 5.0, "priceToBook": 0.5},
+            {"symbol": "MED", "trailingPE": 10.0, "priceToBook": 1.0},
+        ]
+        ranked = rank_candidates(candidates)
+        symbols = [c["symbol"] for c in ranked]
+        assert symbols[0] == "GOOD"
+        assert symbols[-1] == "BAD"
+
+    def test_rank_adds_composite_score(self):
+        candidates = [{"symbol": "A", "trailingPE": 8.0}]
+        ranked = rank_candidates(candidates)
+        assert "_composite_score" in ranked[0]
+
+    def test_rank_empty_list(self):
+        assert rank_candidates([]) == []
+
+
+# ---------------------------------------------------------------------------
+# B6: SmartCandidateGenerator
+# ---------------------------------------------------------------------------
+
+
+class TestSmartCandidateGenerator:
+    @patch("dashboard.candidate_generator.fetch_screener_candidates")
+    @patch("dashboard.candidate_generator.load_sec_universe")
+    def test_generate_batch_returns_ranked_tickers(self, mock_universe, mock_fetch):
+        mock_universe.return_value = {"AAPL": "CIK1", "MSFT": "CIK2", "GOOG": "CIK3"}
+        mock_fetch.return_value = [
+            {"symbol": "GOOG", "trailingPE": 12.0, "priceToBook": 1.2},
+            {"symbol": "AAPL", "trailingPE": 5.0, "priceToBook": 0.8},
+            {"symbol": "MSFT", "trailingPE": 8.0, "priceToBook": 1.0},
+        ]
+        gen = SmartCandidateGenerator()
+        batch = gen.generate_batch(3)
+        assert len(batch) == 3
+        # AAPL has lowest P/E + P/B, should be first
+        assert batch[0] == "AAPL"
+
+    @patch("dashboard.candidate_generator.fetch_screener_candidates")
+    @patch("dashboard.candidate_generator.load_sec_universe")
+    def test_generate_batch_skips_evaluated(self, mock_universe, mock_fetch):
+        mock_universe.return_value = {"A": "1", "B": "2", "C": "3"}
+        mock_fetch.return_value = [
+            {"symbol": "A", "trailingPE": 5.0},
+            {"symbol": "B", "trailingPE": 8.0},
+            {"symbol": "C", "trailingPE": 10.0},
+        ]
+        gen = SmartCandidateGenerator(evaluated={"A"})
+        batch = gen.generate_batch(10)
+        assert "A" not in batch
+        assert len(batch) == 2
+
+    @patch("dashboard.candidate_generator.fetch_screener_candidates")
+    @patch("dashboard.candidate_generator.load_sec_universe")
+    def test_generate_batch_exhaustion(self, mock_universe, mock_fetch):
+        mock_universe.return_value = {}
+        mock_fetch.return_value = [
+            {"symbol": "A", "trailingPE": 5.0},
+        ]
+        gen = SmartCandidateGenerator()
+        batch1 = gen.generate_batch(1)
+        assert len(batch1) == 1
+        batch2 = gen.generate_batch(1)
+        assert batch2 == []
+
+    @patch("dashboard.candidate_generator.fetch_screener_candidates")
+    @patch("dashboard.candidate_generator.load_sec_universe")
+    def test_screener_count_set_after_init(self, mock_universe, mock_fetch):
+        mock_universe.return_value = {}
+        mock_fetch.return_value = [
+            {"symbol": "A", "trailingPE": 5.0},
+            {"symbol": "B", "trailingPE": 8.0},
+        ]
+        gen = SmartCandidateGenerator()
+        gen.generate_batch(0)  # trigger init
+        assert gen.screener_count == 2
+
+    @patch("dashboard.candidate_generator.fetch_screener_candidates")
+    @patch("dashboard.candidate_generator.yf")
+    @patch("dashboard.candidate_generator.load_sec_universe")
+    def test_fallback_on_empty_screener(self, mock_universe, mock_yf, mock_fetch):
+        mock_universe.return_value = {}
+        mock_fetch.return_value = []  # Tier 1 returns nothing
+        mock_yf.screen.return_value = {
+            "quotes": [{"symbol": "FALLBACK", "trailingPE": 10.0}]
+        }
+        gen = SmartCandidateGenerator()
+        batch = gen.generate_batch(10)
+        assert "FALLBACK" in batch
+
+    @patch("dashboard.candidate_generator.load_sec_universe")
+    def test_get_cik(self, mock_universe):
+        mock_universe.return_value = {"AAPL": "CIK123"}
+        gen = SmartCandidateGenerator()
+        assert gen.get_cik("AAPL") == "CIK123"
+        assert gen.get_cik("UNKNOWN") is None
+
+
+# ---------------------------------------------------------------------------
+# B7: ingest_ticker_data
 # ---------------------------------------------------------------------------
 
 

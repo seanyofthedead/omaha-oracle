@@ -12,7 +12,8 @@ MOAT_MIN = 7
 MANAGEMENT_MIN = 6
 MOS_MIN = 0.30  # strictly greater than
 
-MAX_EVALUATIONS = 50
+MAX_EVALUATIONS = 200
+SCREENER_MAX_RESULTS = 500
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,11 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from dashboard.candidate_generator import CandidateGenerator, load_sec_universe, pre_screen_ticker
+from dashboard.candidate_generator import (
+    SmartCandidateGenerator,
+    load_sec_universe,
+    pre_screen_ticker,
+)
 from dashboard.search_config import SearchConfig, check_quality_gates, count_gates_passed
 from dashboard.search_runner import SearchResult, run_search
 
@@ -154,16 +158,25 @@ class TestSearchTimeLimit:
 @pytest.mark.e2e
 class TestSearchExhaustion:
     def test_exhaustion_with_small_universe(self, e2e_tables):
-        """With a tiny universe, search exhausts all candidates."""
+        """With a tiny screener result set, search exhausts all candidates."""
         from unittest.mock import patch
 
+        tiny_results = [
+            {"symbol": "TEST1", "trailingPE": 8.0, "priceToBook": 1.0},
+            {"symbol": "TEST2", "trailingPE": 10.0, "priceToBook": 1.2},
+        ]
         tiny_universe = {"TEST1": "0000000001", "TEST2": "0000000002"}
 
-        with patch("dashboard.candidate_generator._get_ticker_to_cik", return_value=tiny_universe):
-            import dashboard.candidate_generator as cg
-
-            cg._universe_cache = None  # Reset cache
-
+        with (
+            patch(
+                "dashboard.candidate_generator.fetch_screener_candidates",
+                return_value=tiny_results,
+            ),
+            patch(
+                "dashboard.candidate_generator.load_sec_universe",
+                return_value=tiny_universe,
+            ),
+        ):
             config = SearchConfig(num_results=5, time_limit_minutes=5)
             progress: dict[str, Any] = {}
             cancel = threading.Event()
@@ -172,11 +185,8 @@ class TestSearchExhaustion:
 
             # Search should indicate exhaustion or complete quickly
             assert (
-                progress.get("candidates_exhausted") is True
-                or progress.get("is_complete") is True
+                progress.get("candidates_exhausted") is True or progress.get("is_complete") is True
             )
-
-            cg._universe_cache = None  # Clean up
 
 
 # ---------------------------------------------------------------------------
@@ -251,16 +261,23 @@ class TestCandidateDiscovery:
         assert passed is True
         assert info.get("marketCap", 0) > 1_000_000_000
 
-    def test_candidate_generator_deterministic(self):
-        """Two generators with same seed produce same batch."""
+    def test_candidate_generator_ranked_order(self):
+        """SmartCandidateGenerator returns candidates sorted by composite score."""
         from unittest.mock import patch
 
-        fake_universe = {f"T{i}": f"CIK{i}" for i in range(50)}
-        with patch("dashboard.candidate_generator._get_ticker_to_cik", return_value=fake_universe):
-            import dashboard.candidate_generator as cg
-
-            cg._universe_cache = None
-            gen1 = CandidateGenerator(seed=42)
-            gen2 = CandidateGenerator(seed=42)
-            assert gen1.generate_batch(10) == gen2.generate_batch(10)
-            cg._universe_cache = None
+        mock_candidates = [
+            {"symbol": "BAD", "trailingPE": 14.0, "priceToBook": 1.4},
+            {"symbol": "GOOD", "trailingPE": 5.0, "priceToBook": 0.5},
+            {"symbol": "MED", "trailingPE": 10.0, "priceToBook": 1.0},
+        ]
+        with (
+            patch(
+                "dashboard.candidate_generator.fetch_screener_candidates",
+                return_value=mock_candidates,
+            ),
+            patch("dashboard.candidate_generator.load_sec_universe", return_value={}),
+        ):
+            gen = SmartCandidateGenerator()
+            batch = gen.generate_batch(3)
+            assert batch[0] == "GOOD"  # Lowest P/E + P/B = highest score
+            assert batch[-1] == "BAD"  # Highest P/E + P/B = lowest score

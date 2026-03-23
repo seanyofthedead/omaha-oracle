@@ -45,9 +45,11 @@ def render() -> None:
     """Render the Company Search page."""
     st.title("Company Search")
     st.caption(
-        "Discover investment opportunities by screening companies from the SEC universe "
-        "against Omaha Oracle quality gates (moat \u2265 7, management \u2265 6, MoS > 30%). "
-        "Candidates are pre-screened via yfinance before running the full analysis pipeline."
+        "Discover investment opportunities using a 3-tier screening funnel: "
+        "Tier 1 bulk-filters the Yahoo Finance universe by P/E, P/B, D/E, ROE, and FCF; "
+        "Tier 2 ranks survivors by composite gate-proximity score; "
+        "Tier 3 runs top candidates through the full pipeline "
+        "(quant screen, moat \u2265 7, management \u2265 6, MoS > 30%)."
     )
 
     # Initialize session state keys
@@ -147,15 +149,18 @@ def _render_progress() -> None:
             cancel_event.set()
 
     # Hero metrics
-    col1, col2, col3, col4 = st.columns(4, gap="large")
+    screener_count = progress.get("screener_count", 0)
+    col1, col2, col3, col4, col5 = st.columns(5, gap="large")
     with col1:
-        st.metric("Evaluated", progress.get("evaluated_count", 0))
+        st.metric("Pre-screened", screener_count)
     with col2:
-        st.metric("Matches Found", progress.get("match_count", 0))
+        st.metric("Evaluated", progress.get("evaluated_count", 0))
     with col3:
+        st.metric("Matches Found", progress.get("match_count", 0))
+    with col4:
         elapsed = progress.get("elapsed_seconds", 0)
         st.metric("Time Elapsed", f"{elapsed:.0f}s")
-    with col4:
+    with col5:
         config = st.session_state.get("search_config")
         if config:
             remaining = max(0, config.time_limit_minutes * 60 - elapsed)
@@ -194,19 +199,22 @@ def _render_results(results: list[SearchResult]) -> None:
     progress = st.session_state.get("search_progress", {})
     config = st.session_state.get("search_config")
 
-    # Search summary
+    # Search summary with funnel metrics
     with st.container(border=True):
         st.subheader("Search Summary")
-        col1, col2, col3, col4 = st.columns(4)
+        screener_count = progress.get("screener_count", 0)
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.metric("Total Evaluated", progress.get("evaluated_count", len(results)))
+            st.metric("Pre-screened", screener_count)
         with col2:
-            matches = [r for r in results if r.passed_all_gates]
-            st.metric("Qualifying Companies", len(matches))
+            st.metric("Pipeline Evaluated", progress.get("evaluated_count", len(results)))
         with col3:
+            matches = [r for r in results if r.passed_all_gates]
+            st.metric("Qualifying", len(matches))
+        with col4:
             elapsed = progress.get("elapsed_seconds", 0)
             st.metric("Time Taken", f"{elapsed:.1f}s")
-        with col4:
+        with col5:
             if config:
                 st.metric("Target", f"{config.num_results} companies")
 
@@ -287,14 +295,16 @@ def _render_results_table(results: list[SearchResult]) -> None:
     rows = []
     for r in results:
         status = "Error" if r.error else ("Pass" if r.passed_all_gates else "Fail")
-        rows.append({
-            "Ticker": r.ticker,
-            "Company": r.company_name,
-            "Moat": r.moat_score,
-            "Mgmt": r.management_score,
-            "MoS %": f"{r.margin_of_safety * 100:.1f}",
-            "Status": status,
-            "Gates": f"{r.gates_passed_count}/3",
-        })
+        rows.append(
+            {
+                "Ticker": r.ticker,
+                "Company": r.company_name,
+                "Moat": r.moat_score,
+                "Mgmt": r.management_score,
+                "MoS %": f"{r.margin_of_safety * 100:.1f}",
+                "Status": status,
+                "Gates": f"{r.gates_passed_count}/3",
+            }
+        )
 
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)

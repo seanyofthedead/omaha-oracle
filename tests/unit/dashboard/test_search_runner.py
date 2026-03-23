@@ -200,7 +200,7 @@ class TestRunSearch:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_stops_at_requested_count(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis
     ):
@@ -227,7 +227,7 @@ class TestRunSearch:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_stops_at_time_limit(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis
     ):
@@ -267,7 +267,7 @@ class TestRunSearch:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_stops_at_hard_cap(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis
     ):
@@ -285,12 +285,12 @@ class TestRunSearch:
         cancel = threading.Event()
 
         results = run_search(config, progress, cancel)
-        assert len(results) <= 50
+        assert len(results) <= 200
 
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_stops_on_cancel(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
     ):
@@ -329,7 +329,7 @@ class TestRunSearch:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_skips_prescreen_failures(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
     ):
@@ -347,8 +347,8 @@ class TestRunSearch:
         mock_ingest.return_value = True
         mock_pipeline.side_effect = lambda t, d, f: _make_failing_pipeline(t)
 
-        # Return one batch, then empty to stop
-        mock_gen.generate_batch.side_effect = [["GOOD", "BAD", "GOOD2"], []]
+        # generate_batch(0) for init, then one batch, then empty to stop
+        mock_gen.generate_batch.side_effect = [[], ["GOOD", "BAD", "GOOD2"], []]
 
         config = SearchConfig(num_results=10, time_limit_minutes=60)
         progress = {}
@@ -362,13 +362,13 @@ class TestRunSearch:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_handles_pipeline_failure(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
     ):
         mock_gen = MagicMock()
-        # Return a batch, then empty to stop
-        mock_gen.generate_batch.side_effect = [["ERR", "OK"], []]
+        # generate_batch(0) for init, then a batch, then empty to stop
+        mock_gen.generate_batch.side_effect = [[], ["ERR", "OK"], []]
         mock_gen.get_cik.return_value = "0000000001"
         mock_gen_cls.return_value = mock_gen
 
@@ -397,7 +397,7 @@ class TestRunSearch:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_handles_ingestion_failure(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
     ):
@@ -414,8 +414,8 @@ class TestRunSearch:
         mock_ingest.side_effect = selective_ingest
         mock_pipeline.side_effect = lambda t, d, f: _make_failing_pipeline(t)
 
-        # Return one batch, then empty to stop
-        mock_gen.generate_batch.side_effect = [["FAIL", "OK"], []]
+        # generate_batch(0) for init, then one batch, then empty to stop
+        mock_gen.generate_batch.side_effect = [[], ["FAIL", "OK"], []]
 
         config = SearchConfig(num_results=10, time_limit_minutes=60)
         progress = {}
@@ -430,7 +430,7 @@ class TestRunSearch:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_runs_thesis_only_for_qualifiers(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis
     ):
@@ -460,13 +460,13 @@ class TestRunSearch:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_returns_near_misses(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
     ):
         mock_gen = MagicMock()
-        # Return one batch, then empty to stop
-        mock_gen.generate_batch.side_effect = [["NEAR"], []]
+        # generate_batch(0) for init, then one batch, then empty to stop
+        mock_gen.generate_batch.side_effect = [[], ["NEAR"], []]
         mock_gen.get_cik.return_value = "0000000001"
         mock_gen_cls.return_value = mock_gen
 
@@ -501,7 +501,7 @@ class TestProgressResultsMemory:
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
-    @patch("dashboard.search_runner.CandidateGenerator")
+    @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_progress_results_does_not_grow_unbounded(
         self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
     ):
@@ -524,7 +524,7 @@ class TestProgressResultsMemory:
 
         mock_gen = MagicMock()
         tickers = [f"T{i}" for i in range(10)]
-        mock_gen.generate_batch.side_effect = [tickers, []]
+        mock_gen.generate_batch.side_effect = [[], tickers, []]
         mock_gen.get_cik.return_value = "0000000001"
         mock_gen_cls.return_value = mock_gen
 
