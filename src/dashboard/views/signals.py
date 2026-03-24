@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from dashboard.data import DataLoadError, load_decisions
-from dashboard.fmt import fmt_date, fmt_datetime, fmt_null
+from dashboard.fmt import fmt_date, fmt_datetime, fmt_null, render_export_button
 
 
 def _render_signal_card(d: dict) -> None:
@@ -155,6 +156,20 @@ def render() -> None:
             "Try increasing the 'Max signals' slider."
         )
         return
+
+    # Export decisions as CSV
+    signal_rows = []
+    for d in decisions:
+        signal_rows.append(
+            {
+                "Signal": (d.get("signal") or "").upper(),
+                "Ticker": d.get("ticker", ""),
+                "Timestamp": d.get("timestamp", ""),
+                "Reasoning": (d.get("payload") or {}).get("reasoning", ""),
+            }
+        )
+    signal_df = pd.DataFrame(signal_rows)
+    render_export_button(signal_df, "signals", label="Download Signals CSV")
 
     if "page_toast_shown" not in st.session_state:
         st.toast(

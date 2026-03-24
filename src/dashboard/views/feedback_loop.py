@@ -12,7 +12,7 @@ from dashboard.data import (
     load_postmortem,
     load_postmortem_keys,
 )
-from dashboard.fmt import fmt_date, fmt_null, fmt_pct_ratio
+from dashboard.fmt import fmt_date, fmt_null, fmt_pct_ratio, render_export_button
 
 
 def render() -> None:
@@ -147,6 +147,7 @@ def render() -> None:
                     hide_index=True,
                     height=min(len(rows) * 35 + 38, 400),
                 )
+                render_export_button(lesson_df, "lessons", label="Download Lessons CSV")
         else:
             st.info(
                 "No active lessons. Lessons are extracted from "

@@ -11,6 +11,7 @@ from dashboard.fmt import (
     fmt_currency_short,
     fmt_delta,
     fmt_pct,
+    render_export_button,
 )
 
 
@@ -149,6 +150,7 @@ def render() -> None:
                 hide_index=True,
                 height=min(len(pos_rows) * 35 + 38, 400),
             )
+            render_export_button(pos_df, "positions", label="Download Positions CSV")
 
     with tab_allocation:
         # Sector allocation breakdown

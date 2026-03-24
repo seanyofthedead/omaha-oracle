@@ -14,7 +14,10 @@ these functions so the dashboard uses a single, consistent presentation style.
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import UTC, datetime
+
+import pandas as pd
+import streamlit as st
 
 _Numeric = int | float | None
 
@@ -183,3 +186,22 @@ def fmt_datetime(value: str | datetime | None) -> str:
         except ValueError:
             continue
     return value
+
+
+# ── Export ─────────────────────────────────────────────────────────────
+
+
+def render_export_button(df: pd.DataFrame, filename_prefix: str, label: str = "Download CSV") -> None:
+    """Render a Streamlit download button that exports *df* as CSV.
+
+    The downloaded file is named ``omaha_oracle_{prefix}_{YYYY-MM-DD}.csv``.
+    """
+    csv_bytes = df.to_csv(index=False).encode("utf-8")
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    file_name = f"omaha_oracle_{filename_prefix}_{date_str}.csv"
+    st.download_button(
+        label=label,
+        data=csv_bytes,
+        file_name=file_name,
+        mime="text/csv",
+    )
