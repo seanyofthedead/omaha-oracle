@@ -41,6 +41,7 @@ _PAGE_MODULES = {
     "Paper Trading": "dashboard.views.paper_trading",
     "Backtest": "dashboard.views.backtest",
     "Prompt Lab": "dashboard.views.prompt_lab",
+    "Sector Insights": "dashboard.views.sectors",
 }
 
 

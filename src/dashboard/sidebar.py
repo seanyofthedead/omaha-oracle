@@ -30,6 +30,7 @@ _PAGE_ICONS = {
     "Paper Trading": ":material/candlestick_chart:",
     "Backtest": ":material/history:",
     "Prompt Lab": ":material/science:",
+    "Sector Insights": ":material/donut_large:",
 }
 
 
