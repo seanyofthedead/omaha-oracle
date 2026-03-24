@@ -43,6 +43,95 @@ _PAGE_MODULES = {
 }
 
 
+def _show_tour() -> None:
+    """Show a guided onboarding tour for first-time users."""
+    step = st.session_state.get("tour_step", 0)
+
+    tour_steps = [
+        {
+            "title": "Welcome to Omaha Oracle",
+            "content": (
+                "Omaha Oracle is an autonomous AI-powered stock-picking agent built on "
+                "Graham-Dodd-Buffett value investing principles. This dashboard lets you "
+                "monitor its decisions, analyze candidates, and track portfolio performance."
+            ),
+        },
+        {
+            "title": "The 5-Stage Analysis Pipeline",
+            "content": (
+                "Every stock candidate goes through 5 stages:\n\n"
+                "1. **Quantitative Screen** — Pure math filters (P/E, P/B, ROIC, Piotroski F-Score)\n"
+                "2. **Moat Analysis** — AI evaluates competitive advantages\n"
+                "3. **Management Quality** — AI scores owner-operator mindset and capital allocation\n"
+                "4. **Intrinsic Value** — DCF, EPV, and asset floor calculations\n"
+                "5. **Investment Thesis** — AI writes a full Buffett-style thesis"
+            ),
+        },
+        {
+            "title": "Self-Improvement Loop",
+            "content": (
+                "Every quarter, the system runs a post-mortem audit:\n\n"
+                "- Classifies past decisions as good/bad based on actual outcomes\n"
+                "- Extracts lessons from mistakes\n"
+                "- Injects those lessons into future AI analysis prompts\n"
+                "- Auto-adjusts screening thresholds\n\n"
+                "Visit the **Feedback Loop** page to see active lessons and mistake rate trends."
+            ),
+        },
+        {
+            "title": "Risk Guardrails",
+            "content": (
+                "Hard-coded safety rules that cannot be overridden by AI:\n\n"
+                "- Max **15%** of portfolio in any single position\n"
+                "- Max **35%** sector exposure\n"
+                "- Min **10%** cash reserve at all times\n"
+                "- **Zero** leverage, shorts, options, or crypto\n\n"
+                "Visit the **Portfolio Overview** page to see guardrail compliance."
+            ),
+        },
+        {
+            "title": "You're Ready!",
+            "content": (
+                "Use the sidebar to navigate between pages. Key pages:\n\n"
+                "- **Portfolio Overview** — Current holdings and health\n"
+                "- **Watchlist** — Candidates under evaluation\n"
+                "- **Signals** — Recent BUY/SELL decisions\n"
+                "- **Company Search** — Find new candidates\n"
+                "- **Backtest** — Replay past performance\n\n"
+                "You can restart this tour anytime from the sidebar."
+            ),
+        },
+    ]
+
+    if step >= len(tour_steps):
+        st.session_state.tour_completed = True
+        return
+
+    current = tour_steps[step]
+
+    with st.container(border=True):
+        col_title, col_counter = st.columns([4, 1])
+        with col_title:
+            st.subheader(current["title"])
+        with col_counter:
+            st.caption(f"Step {step + 1} of {len(tour_steps)}")
+
+        st.markdown(current["content"])
+
+        col_skip, col_spacer, col_next = st.columns([1, 3, 1])
+        with col_skip:
+            if st.button("Skip tour", key="tour_skip"):
+                st.session_state.tour_dismissed = True
+                st.rerun()
+        with col_next:
+            label = "Get Started" if step == len(tour_steps) - 1 else "Next"
+            if st.button(label, key="tour_next", type="primary"):
+                st.session_state.tour_step = step + 1
+                if step + 1 >= len(tour_steps):
+                    st.session_state.tour_completed = True
+                st.rerun()
+
+
 def _require_auth() -> None:
     """
     Block access until the user provides the correct dashboard password.
@@ -109,6 +198,12 @@ def main() -> None:
         st_autorefresh(interval=interval_min * 60 * 1000, key="auto_refresh_timer")
 
     _require_auth()
+
+    # ── Onboarding Tour ──
+    if not st.session_state.get("tour_completed", False) and not st.session_state.get(
+        "tour_dismissed", False
+    ):
+        _show_tour()
 
     selection = render_sidebar(list(_PAGE_MODULES.keys()))
 
