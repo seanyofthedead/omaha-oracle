@@ -86,6 +86,17 @@ def render_sidebar(page_names: list[str]) -> str:
         st.cache_data.clear()
         st.rerun()
 
+    # ── Auto-Refresh ──
+    auto_refresh = st.sidebar.toggle("Auto-refresh", value=False, key="auto_refresh")
+    if auto_refresh:
+        refresh_interval = st.sidebar.select_slider(
+            "Interval",
+            options=[1, 5, 10, 30],
+            value=5,
+            format_func=lambda x: f"{x} min",
+            key="refresh_interval",
+        )
+
     # ── Footer ──
     env = _get_environment()
     env_color = "#4CAF50" if env == "dev" else "#F44336"
