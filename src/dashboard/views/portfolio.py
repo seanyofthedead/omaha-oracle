@@ -32,6 +32,22 @@ def render() -> None:
     total = data.get("portfolio_value", 0)
     positions = data.get("positions", [])
 
+    # Check for position drill-down
+    if "selected_position" in st.session_state:
+        from dashboard.views.position_detail import render_position_detail
+
+        selected_ticker = st.session_state.selected_position
+        # Find the position
+        position = next(
+            (p for p in positions if p.get("ticker") == selected_ticker),
+            None,
+        )
+        if position:
+            render_position_detail(position, data.get("portfolio_value", 0))
+            return
+        else:
+            st.session_state.pop("selected_position", None)
+
     # Compute aggregate gain/loss
     total_cost = sum(p.get("cost_basis", 0) or 0 for p in positions)
     total_mv = sum(p.get("market_value", 0) or 0 for p in positions)
@@ -149,6 +165,16 @@ def render() -> None:
                 hide_index=True,
                 height=min(len(pos_rows) * 35 + 38, 400),
             )
+        # Position drill-down navigation
+        if positions:
+            tickers = [p.get("ticker", "") for p in positions if p.get("ticker")]
+            if tickers:
+                selected = st.selectbox(
+                    "View position details", [""] + tickers, key="position_select"
+                )
+                if selected:
+                    st.session_state.selected_position = selected
+                    st.rerun()
 
     with tab_allocation:
         # Sector allocation breakdown
