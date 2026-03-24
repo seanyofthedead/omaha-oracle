@@ -138,7 +138,9 @@ def render() -> None:
     }
 
     # ── Tier 2: Primary content in tabs ──
-    tab_positions, tab_allocation = st.tabs(["Positions", "Allocation"])
+    tab_positions, tab_allocation, tab_scenario = st.tabs(
+        ["Positions", "Allocation", "Scenario"]
+    )
 
     with tab_positions:
         with st.container(border=True):
@@ -241,6 +243,82 @@ def render() -> None:
                     )
         else:
             st.info("No sector data available for allocation chart.")
+
+    with tab_scenario:
+        st.subheader("What-If Scenario")
+        st.caption(
+            "Simulate adding a new position to see the impact on portfolio guardrails."
+        )
+
+        col_input, col_result = st.columns([1, 2])
+
+        with col_input:
+            with st.form("scenario_form"):
+                sc_ticker = st.text_input("Ticker", placeholder="e.g., AAPL")
+                sc_shares = st.number_input("Shares", min_value=1, value=100, step=10)
+                sc_price = st.number_input(
+                    "Price per share ($)", min_value=0.01, value=100.0, step=1.0
+                )
+                sc_sector = st.selectbox(
+                    "Sector",
+                    [
+                        "Technology",
+                        "Healthcare",
+                        "Financials",
+                        "Consumer Discretionary",
+                        "Consumer Staples",
+                        "Industrials",
+                        "Energy",
+                        "Materials",
+                        "Real Estate",
+                        "Utilities",
+                        "Communication Services",
+                        "Unknown",
+                    ],
+                )
+                sc_submit = st.form_submit_button(
+                    "Run Scenario", use_container_width=True
+                )
+
+        with col_result:
+            if sc_submit and sc_ticker:
+                from dashboard.scenario import simulate_position_add
+
+                result = simulate_position_add(
+                    data, sc_ticker.upper(), sc_shares, sc_price, sc_sector
+                )
+
+                before = result["before"]
+                after = result["after"]
+
+                # Before/After comparison
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric(
+                    "Cash Reserve",
+                    f"{after['cash_pct']:.1f}%",
+                    delta=f"{after['cash_pct'] - before['cash_pct']:.1f}%",
+                )
+                m2.metric("New Position", f"{after['new_position_pct']:.1f}%")
+                m3.metric(
+                    "Max Sector",
+                    f"{after['max_sector_pct']:.1f}%",
+                    delta=f"{after['max_sector_pct'] - before['max_sector_pct']:.1f}%",
+                )
+                m4.metric(
+                    "Positions",
+                    after["position_count"],
+                    delta=f"{after['position_count'] - before['position_count']}",
+                )
+
+                st.caption(f"Cost: ${after['cost']:,.2f}")
+
+                if result["feasible"]:
+                    st.success("This scenario passes all risk guardrails.")
+                else:
+                    for v in result["violations"]:
+                        st.error(v)
+            elif sc_submit:
+                st.warning("Please enter a ticker symbol.")
 
     # ── Tier 3: Supplementary content ──
     st.divider()
