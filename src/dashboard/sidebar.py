@@ -86,6 +86,13 @@ def render_sidebar(page_names: list[str]) -> str:
         st.cache_data.clear()
         st.rerun()
 
+    # ── Restart Tour ──
+    if st.sidebar.button("Restart Tour", use_container_width=True):
+        st.session_state.tour_completed = False
+        st.session_state.tour_dismissed = False
+        st.session_state.tour_step = 0
+        st.rerun()
+
     # ── Footer ──
     env = _get_environment()
     env_color = "#4CAF50" if env == "dev" else "#F44336"
