@@ -1,0 +1,109 @@
+CLAUDE CODE — MOBILE REMOTE CONTROL SETUP
+==========================================
+
+Connect your phone to your desktop Claude Code session so you can
+approve prompts, send messages, and monitor progress from anywhere.
+
+
+PREREQUISITES
+-------------
+- Claude Code v2.1.52+ on your desktop
+- Claude Pro or Max subscription
+- Claude mobile app (iOS or Android)
+- Desktop terminal must stay open (or use tmux)
+
+
+QUICK START (3 steps)
+---------------------
+
+1. OPEN A TERMINAL on your desktop and start Claude Code:
+
+       claude --rc
+
+   This launches Claude Code with Remote Control enabled.
+   A URL and QR code will appear in the terminal.
+
+2. SCAN THE QR CODE with your phone camera, or open the URL
+   on your phone's browser. You can also open the Claude mobile
+   app and look for active sessions under claude.ai/code.
+
+3. DONE. Your phone now mirrors the terminal session. Permission
+   prompts, questions, and tool approvals all appear on your phone.
+
+
+KEEPING THE SESSION ALIVE
+-------------------------
+
+Problem:  If you close the terminal, the session dies.
+Solution: Use tmux to keep it running in the background.
+
+  Start:      tmux new-session -s claude "claude --rc"
+  Detach:     Press Ctrl-b then d (session keeps running)
+  Reattach:   tmux attach -t claude
+  Kill:       tmux kill-session -t claude
+
+With tmux, you can close the terminal window, walk away, and
+reconnect later. Your phone stays connected the whole time.
+
+Note: tmux is not native on Windows. On Windows, just keep the
+terminal window open, or use Windows Terminal tabs.
+
+
+AUTOMATIC REMOTE CONTROL (no --rc flag needed)
+-----------------------------------------------
+
+If you want EVERY Claude Code session to be remotely accessible
+without typing --rc each time, this is already configured in your
+settings at ~/.claude/settings.json:
+
+    "enableRemoteControlForAllSessions": true
+
+With this set, just run "claude" normally and it auto-registers
+for Remote Control.
+
+
+RECONNECTING AFTER A DROP
+--------------------------
+
+- Brief network drops: Auto-reconnects, no action needed.
+- Long outage (10+ min): The remote session expires.
+  To reconnect, type /rc in the Claude Code terminal.
+  A new QR code / URL will appear. Scan again from your phone.
+
+
+WHAT SHOWS UP ON YOUR PHONE
+----------------------------
+
+  Shows on phone (needs your approval):
+    - Permission prompts (git push, rm, deploy, etc.)
+    - Yes/no confirmations
+    - Multi-choice questions
+    - Any tool Claude isn't pre-allowed to use
+
+  Runs silently (pre-approved, no prompt):
+    - Reading and editing files
+    - Running tests (pytest, ruff, mypy)
+    - Git queries (status, log, diff, blame)
+    - Web searches and fetches
+
+
+TROUBLESHOOTING
+---------------
+
+"Remote Control not starting"
+  -> Check version: claude --version (need v2.1.52+)
+  -> Try manually: type /rc inside an active session
+
+"Phone can't find the session"
+  -> Make sure phone and desktop are on the same account
+  -> Try the URL directly instead of QR code
+  -> Check that your subscription is Pro or Max
+
+"Session died while I was away"
+  -> Use tmux (see above) to keep the process alive
+  -> Type /rc in the terminal to start a new remote session
+
+"Permission prompt didn't appear on phone"
+  -> The tool may be pre-allowed in settings — check
+     ~/.claude/settings.json under permissions.allow
+  -> Only non-allowed tools trigger mobile prompts
