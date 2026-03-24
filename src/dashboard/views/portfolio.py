@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
-from dashboard.data import DataLoadError, load_portfolio
+from dashboard.data import DataLoadError, load_portfolio, load_portfolio_history
 from dashboard.fmt import (
     fmt_currency,
     fmt_currency_short,
@@ -139,7 +140,9 @@ def render() -> None:
     }
 
     # ── Tier 2: Primary content in tabs ──
-    tab_positions, tab_allocation = st.tabs(["Positions", "Allocation"])
+    tab_positions, tab_allocation, tab_performance = st.tabs(
+        ["Positions", "Allocation", "Performance"]
+    )
 
     with tab_positions:
         with st.container(border=True):
@@ -243,6 +246,116 @@ def render() -> None:
                     )
         else:
             st.info("No sector data available for allocation chart.")
+
+    with tab_performance:
+        try:
+            with st.spinner("Loading performance history..."):
+                perf = load_portfolio_history()
+        except DataLoadError as exc:
+            st.error(str(exc))
+            perf = {"dates": [], "spy_values": [], "metrics": {}}
+
+        dates = perf.get("dates", [])
+        spy_values = perf.get("spy_values", [])
+        metrics = perf.get("metrics", {})
+
+        if not dates:
+            st.info("No decision history available yet.")
+        else:
+            # Hero metrics
+            pc1, pc2, pc3, pc4 = st.columns(4, gap="large")
+            with pc1:
+                st.metric(
+                    "S&P 500 Return",
+                    fmt_pct(metrics.get("spy_return_pct", 0)),
+                    help="SPY total return since first decision.",
+                )
+            with pc2:
+                st.metric(
+                    "Total Decisions",
+                    metrics.get("total_decisions", 0),
+                    help="Total buy/sell decisions made.",
+                )
+            with pc3:
+                st.metric(
+                    "Buys",
+                    metrics.get("total_buys", 0),
+                    help="Number of BUY decisions.",
+                )
+            with pc4:
+                st.metric(
+                    "Sells",
+                    metrics.get("total_sells", 0),
+                    help="Number of SELL decisions.",
+                )
+
+            # Benchmark chart with decision markers
+            with st.container(border=True):
+                fig = go.Figure()
+                fig.add_trace(
+                    go.Scatter(
+                        x=dates,
+                        y=spy_values,
+                        mode="lines",
+                        name="S&P 500 (SPY)",
+                        line=dict(color="#6C9EFF"),
+                    )
+                )
+
+                # Add BUY markers
+                buy_dates = perf.get("buy_dates", [])
+                if buy_dates:
+                    # Map buy dates to SPY values for y-position
+                    date_to_spy = dict(zip(dates, spy_values))
+                    buy_y = [date_to_spy.get(d) for d in buy_dates]
+                    valid = [(d, y) for d, y in zip(buy_dates, buy_y) if y is not None]
+                    if valid:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[d for d, _ in valid],
+                                y=[y for _, y in valid],
+                                mode="markers",
+                                name="BUY",
+                                marker=dict(
+                                    symbol="triangle-up",
+                                    size=12,
+                                    color="#00C853",
+                                ),
+                            )
+                        )
+
+                # Add SELL markers
+                sell_dates = perf.get("sell_dates", [])
+                if sell_dates:
+                    date_to_spy = dict(zip(dates, spy_values))
+                    sell_y = [date_to_spy.get(d) for d in sell_dates]
+                    valid = [(d, y) for d, y in zip(sell_dates, sell_y) if y is not None]
+                    if valid:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[d for d, _ in valid],
+                                y=[y for _, y in valid],
+                                mode="markers",
+                                name="SELL",
+                                marker=dict(
+                                    symbol="triangle-down",
+                                    size=12,
+                                    color="#FF1744",
+                                ),
+                            )
+                        )
+
+                fig.update_layout(
+                    template="omaha_oracle",
+                    yaxis_title="Indexed Value (100 = start)",
+                    xaxis_title="Date",
+                    height=450,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption(
+                    "S&P 500 (SPY) indexed to 100 at the date of the first decision. "
+                    "Green/red triangles mark BUY/SELL decisions."
+                )
 
     # ── Tier 3: Supplementary content ──
     st.divider()

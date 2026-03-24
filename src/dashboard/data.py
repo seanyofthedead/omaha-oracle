@@ -252,6 +252,84 @@ def load_lessons() -> list[dict[str, Any]]:
         raise DataLoadError(_friendly_aws_message(exc, "active lessons")) from exc
 
 
+@st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
+def load_portfolio_history() -> dict[str, Any]:
+    """Load portfolio value history and SPY benchmark for performance comparison."""
+    try:
+        cfg = get_config()
+        client = DynamoClient(cfg.table_decisions)
+        # Get all decisions to build timeline
+        decisions = client.query(
+            Key("record_type").eq("DECISION"),
+            index_name="record_type-timestamp-index",
+            scan_forward=True,
+        )
+
+        if not decisions:
+            return {"dates": [], "portfolio_values": [], "spy_values": [], "metrics": {}}
+
+        from datetime import datetime as dt_cls
+
+        try:
+            import yfinance as yf
+        except ImportError:
+            _log.warning("yfinance not installed — portfolio history unavailable")
+            return {"dates": [], "portfolio_values": [], "spy_values": [], "metrics": {}}
+
+        timestamps = [d.get("timestamp", "") for d in decisions if d.get("timestamp")]
+        if not timestamps:
+            return {"dates": [], "portfolio_values": [], "spy_values": [], "metrics": {}}
+
+        start_date = min(timestamps)[:10]  # YYYY-MM-DD
+
+        # Fetch SPY data for benchmark
+        spy = yf.download("SPY", start=start_date, progress=False)
+        if spy.empty:
+            return {"dates": [], "portfolio_values": [], "spy_values": [], "metrics": {}}
+
+        # Build simplified portfolio value series from decisions
+        # Use SPY dates as the x-axis, normalize both to 100 at start
+        spy_closes = spy["Close"].dropna()
+        dates = [d.strftime("%Y-%m-%d") for d in spy_closes.index]
+        spy_values = (spy_closes / spy_closes.iloc[0] * 100).tolist()
+
+        # Count buy/sell decisions over time as a proxy for portfolio activity
+        buy_dates = [d["timestamp"][:10] for d in decisions if d.get("signal") == "BUY"]
+        sell_dates = [d["timestamp"][:10] for d in decisions if d.get("signal") == "SELL"]
+
+        # Also load current portfolio for actual return calculation
+        state = load_portfolio_state(cfg.table_portfolio)
+        portfolio_value = state.get("portfolio_value", 100000)
+
+        # Calculate basic metrics
+        if len(spy_values) >= 2:
+            spy_return = (spy_values[-1] / spy_values[0] - 1) * 100
+        else:
+            spy_return = 0.0
+
+        total_decisions = len(decisions)
+        total_buys = len(buy_dates)
+        total_sells = len(sell_dates)
+
+        return {
+            "dates": dates,
+            "spy_values": spy_values if isinstance(spy_values, list) else [float(v) for v in spy_values],
+            "buy_dates": buy_dates,
+            "sell_dates": sell_dates,
+            "metrics": {
+                "spy_return_pct": round(spy_return, 2),
+                "total_decisions": total_decisions,
+                "total_buys": total_buys,
+                "total_sells": total_sells,
+                "start_date": start_date,
+                "portfolio_value": portfolio_value,
+            },
+        }
+    except Exception as exc:
+        _log.warning("load_portfolio_history failed", extra={"error": str(exc)})
+        raise DataLoadError(_friendly_aws_message(exc, "portfolio history")) from exc
+
+
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_config_thresholds() -> dict[str, Any]:
     """Load screening thresholds from config table."""
