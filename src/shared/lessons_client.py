@@ -142,6 +142,22 @@ class LessonsClient:
         if not top:
             return ""
 
+        # Track injection counts
+        for lesson in top:
+            try:
+                self._db.update_item(
+                    key={
+                        "lesson_type": lesson["lesson_type"],
+                        "lesson_id": lesson["lesson_id"],
+                    },
+                    update_expression=(
+                        "SET times_injected = if_not_exists(times_injected, :zero) + :inc"
+                    ),
+                    expression_attribute_values={":zero": 0, ":inc": 1},
+                )
+            except Exception:
+                pass  # Non-critical — don't block analysis
+
         return self._format_for_injection(top)
 
     def get_confidence_adjustment(

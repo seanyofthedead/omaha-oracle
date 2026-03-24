@@ -252,6 +252,32 @@ def load_lessons() -> list[dict[str, Any]]:
         raise DataLoadError(_friendly_aws_message(exc, "active lessons")) from exc
 
 
+@st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
+def load_lesson_effectiveness() -> dict[str, Any]:
+    """Load lesson injection counts and effectiveness metrics."""
+    try:
+        cfg = get_config()
+        client = DynamoClient(cfg.table_lessons)
+        # Get ALL lessons (not just active) to see historical effectiveness
+        all_lessons = client.scan_all()
+
+        total_lessons = len(all_lessons)
+        active_count = sum(1 for ls in all_lessons if ls.get("active_flag") == "1")
+        total_injections = sum(ls.get("times_injected", 0) for ls in all_lessons)
+        manual_count = sum(1 for ls in all_lessons if ls.get("source") == "manual")
+
+        return {
+            "total_lessons": total_lessons,
+            "active_count": active_count,
+            "total_injections": total_injections,
+            "manual_count": manual_count,
+            "lessons": all_lessons,
+        }
+    except Exception as exc:
+        _log.warning("load_lesson_effectiveness failed", extra={"error": str(exc)})
+        raise DataLoadError(_friendly_aws_message(exc, "lesson effectiveness data")) from exc
+
+
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_config_thresholds() -> dict[str, Any]:
     """Load screening thresholds from config table."""
