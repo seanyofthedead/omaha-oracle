@@ -114,4 +114,7 @@ def render_sidebar(page_names: list[str]) -> str:
         unsafe_allow_html=True,
     )
 
+    st.sidebar.divider()
+    st.sidebar.toggle("Dark mode", value=True, key="dark_mode")
+
     return selection
