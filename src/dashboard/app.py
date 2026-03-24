@@ -38,6 +38,7 @@ _PAGE_MODULES = {
     "Upload Analysis": "dashboard.views.upload_analysis",
     "Company Search": "dashboard.views.company_search",
     "Paper Trading": "dashboard.views.paper_trading",
+    "Backtest": "dashboard.views.backtest",
 }
 
 

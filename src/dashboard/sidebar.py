@@ -28,6 +28,7 @@ _PAGE_ICONS = {
     "Upload Analysis": ":material/upload_file:",
     "Company Search": ":material/search:",
     "Paper Trading": ":material/candlestick_chart:",
+    "Backtest": ":material/history:",
 }
 
 
