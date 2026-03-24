@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.data import DataLoadError, load_watchlist_analysis
-from dashboard.fmt import fmt_null, fmt_pct
+from dashboard.fmt import fmt_null, fmt_pct, render_export_button
 
 
 def render() -> None:
@@ -194,6 +194,7 @@ def render() -> None:
                 hide_index=True,
                 height=tbl_height,
             )
+            render_export_button(val_df, "watchlist_valuation", label="Download Watchlist CSV")
 
     with tab_quality:
         with st.container(border=True):
@@ -204,6 +205,7 @@ def render() -> None:
                 hide_index=True,
                 height=tbl_height,
             )
+            render_export_button(qual_df, "watchlist_quality", label="Download Quality Scores CSV")
 
     # ── Tier 3: Supplementary content ──
     st.divider()
