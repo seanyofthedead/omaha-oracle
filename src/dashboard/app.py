@@ -24,6 +24,7 @@ if str(Path(__file__).resolve().parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 from dashboard.sidebar import render_sidebar
 from dashboard.styles import apply_custom_styles
@@ -100,6 +101,12 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
     apply_custom_styles()
+
+    # Auto-refresh if enabled
+    if st.session_state.get("auto_refresh", False):
+        interval_min = st.session_state.get("refresh_interval", 5)
+        st_autorefresh(interval=interval_min * 60 * 1000, key="auto_refresh_timer")
+
     _require_auth()
 
     selection = render_sidebar(list(_PAGE_MODULES.keys()))
