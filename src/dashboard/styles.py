@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 _DARK_CSS = """
 <style>
@@ -141,3 +142,36 @@ def apply_custom_styles(theme: str = "dark") -> None:
     """
     if theme == "dark":
         st.markdown(_DARK_CSS, unsafe_allow_html=True)
+
+    # ── Keyboard shortcuts ──
+    components.html(
+        """
+<script>
+document.addEventListener('keydown', function(e) {
+    // Alt+R: Refresh data
+    if (e.altKey && e.key === 'r') {
+        e.preventDefault();
+        const buttons = parent.document.querySelectorAll('button');
+        for (const btn of buttons) {
+            if (btn.textContent.includes('Refresh Data')) {
+                btn.click();
+                break;
+            }
+        }
+    }
+    // Alt+1 through Alt+9: Switch pages
+    if (e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const radios = parent.document.querySelectorAll(
+            '[data-testid="stSidebar"] label[data-baseweb="radio"]'
+        );
+        const idx = parseInt(e.key) - 1;
+        if (idx < radios.length) {
+            radios[idx].click();
+        }
+    }
+});
+</script>
+""",
+        height=0,
+    )

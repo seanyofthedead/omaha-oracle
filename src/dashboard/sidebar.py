@@ -79,6 +79,9 @@ def render_sidebar(page_names: list[str]) -> str:
         label_visibility="collapsed",
     )
 
+    # ── Keyboard shortcut hints ──
+    st.sidebar.caption("⌨ Alt+1‑9: switch pages · Alt+R: refresh")
+
     st.sidebar.divider()
 
     # ── Refresh Data ──
