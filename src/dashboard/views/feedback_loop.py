@@ -11,6 +11,8 @@ from dashboard.data import (
     load_lessons,
     load_postmortem,
     load_postmortem_keys,
+    retire_lesson,
+    save_lesson,
 )
 from dashboard.fmt import fmt_date, fmt_null, fmt_pct_ratio, render_export_button
 
@@ -105,8 +107,8 @@ def render() -> None:
     st.divider()
 
     # ── Tier 2: Primary content in tabs ──
-    tab_lessons, tab_trends, tab_calibration = st.tabs(
-        ["Lessons", "Mistake Rate Trend", "Calibration"]
+    tab_lessons, tab_trends, tab_calibration, tab_manage = st.tabs(
+        ["Lessons", "Mistake Rate Trend", "Calibration", "Manage Lessons"]
     )
 
     with tab_lessons:
@@ -282,6 +284,99 @@ def render() -> None:
                 "analysis of prediction accuracy by stage and "
                 "sector."
             )
+
+    with tab_manage:
+        with st.form("create_lesson_form"):
+            st.subheader("Create New Lesson")
+            col1, col2 = st.columns(2)
+            with col1:
+                lesson_type = st.selectbox(
+                    "Lesson Type",
+                    [
+                        "moat_bias",
+                        "valuation_bias",
+                        "management_bias",
+                        "sector_bias",
+                        "threshold_adjustment",
+                        "process_improvement",
+                        "data_quality",
+                    ],
+                )
+                severity = st.selectbox("Severity", ["minor", "moderate", "high", "critical"])
+                ticker = st.text_input("Ticker (optional)", placeholder="e.g., AAPL")
+                sector = st.text_input("Sector", value="ALL", placeholder="e.g., Technology")
+            with col2:
+                description = st.text_area(
+                    "Description", placeholder="1-2 sentence summary of the lesson"
+                )
+                actionable_rule = st.text_area(
+                    "Actionable Rule", placeholder="Specific rule for future analysis"
+                )
+                prompt_injection = st.text_area(
+                    "Prompt Injection Text",
+                    placeholder="2-3 sentences to inject into future prompts",
+                )
+                expiry_quarters = st.slider("Expiry (quarters)", 4, 12, 8)
+
+            submitted = st.form_submit_button("Create Lesson", use_container_width=True)
+
+            if submitted:
+                if not description or not actionable_rule:
+                    st.error("Description and actionable rule are required.")
+                else:
+                    from datetime import UTC, datetime, timedelta
+
+                    now = datetime.now(UTC)
+                    lesson_id = f"MANUAL_{now.strftime('%Y%m%d_%H%M%S')}"
+                    expires_at = (now + timedelta(days=expiry_quarters * 91)).isoformat()
+
+                    lesson = {
+                        "lesson_type": lesson_type,
+                        "lesson_id": lesson_id,
+                        "severity": severity,
+                        "description": description,
+                        "actionable_rule": actionable_rule,
+                        "prompt_injection_text": prompt_injection,
+                        "ticker": ticker.upper().strip() if ticker else "",
+                        "sector": sector.strip() or "ALL",
+                        "expires_at": expires_at,
+                        "active_flag": "1",
+                        "created_at": now.isoformat(),
+                        "source": "manual",
+                    }
+
+                    try:
+                        save_lesson(lesson)
+                        st.success(f"Lesson '{lesson_id}' created successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to save lesson: {e}")
+
+        st.subheader("Active Lessons")
+        if lessons:
+            for lesson in lessons:
+                with st.expander(
+                    f"{lesson.get('severity', '').upper()} — "
+                    f"{lesson.get('description', 'No description')[:80]}"
+                ):
+                    st.text(f"Type: {lesson.get('lesson_type', '')}")
+                    st.text(f"Ticker: {lesson.get('ticker', 'N/A')}")
+                    st.text(f"Sector: {lesson.get('sector', 'ALL')}")
+                    st.text(f"Expires: {lesson.get('expires_at', '')[:10]}")
+                    st.markdown(f"**Rule:** {lesson.get('actionable_rule', '')}")
+                    st.markdown(f"**Prompt text:** {lesson.get('prompt_injection_text', '')}")
+
+                    if st.button(
+                        "Retire this lesson", key=f"retire_{lesson.get('lesson_id', '')}"
+                    ):
+                        try:
+                            retire_lesson(lesson["lesson_type"], lesson["lesson_id"])
+                            st.success("Lesson retired.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to retire: {e}")
+        else:
+            st.info("No active lessons to manage.")
 
     # ── Tier 3: Supplementary content ──
     st.divider()

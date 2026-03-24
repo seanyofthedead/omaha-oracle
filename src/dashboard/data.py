@@ -348,6 +348,36 @@ def load_thesis_content(ticker: str) -> str | None:
         return None  # Non-critical — just won't show thesis
 
 
+def save_lesson(lesson: dict[str, Any]) -> None:
+    """Save a new or updated lesson to DynamoDB."""
+    try:
+        cfg = get_config()
+        client = DynamoClient(cfg.table_lessons)
+        client.put_item(lesson)
+        # Clear the lessons cache so the new lesson appears immediately
+        load_lessons.clear()
+    except Exception as exc:
+        _log.warning("save_lesson failed", extra={"error": str(exc)})
+        raise DataLoadError(_friendly_aws_message(exc, "saving lesson")) from exc
+
+
+def retire_lesson(lesson_type: str, lesson_id: str) -> None:
+    """Retire a lesson by setting active_flag to '0'."""
+    try:
+        cfg = get_config()
+        client = DynamoClient(cfg.table_lessons)
+        client.update_item(
+            key={"lesson_type": lesson_type, "lesson_id": lesson_id},
+            update_expression="SET active_flag = :af",
+            expression_attribute_values={":af": "0"},
+        )
+        # Clear cache
+        load_lessons.clear()
+    except Exception as exc:
+        _log.warning("retire_lesson failed", extra={"error": str(exc)})
+        raise DataLoadError(_friendly_aws_message(exc, "retiring lesson")) from exc
+
+
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_config_thresholds() -> dict[str, Any]:
     """Load screening thresholds from config table."""
