@@ -123,6 +123,7 @@ def render() -> None:
                         "Severity": lesson.get("severity", ""),
                         "Ticker": fmt_null(lesson.get("ticker", "") or None),
                         "Sector": lesson.get("sector", "ALL"),
+                        "Times Injected": lesson.get("times_injected", 0),
                         "Expires": fmt_date(lesson.get("expires_at")),
                         "Text": text or fmt_null(None),
                     }
@@ -134,6 +135,11 @@ def render() -> None:
                 "Severity": st.column_config.TextColumn("Severity", width="small"),
                 "Ticker": st.column_config.TextColumn("Ticker", width="small"),
                 "Sector": st.column_config.TextColumn("Sector", width="small"),
+                "Times Injected": st.column_config.NumberColumn(
+                    "Times Injected",
+                    width="small",
+                    help="Number of times this lesson has been injected into AI analysis prompts.",
+                ),
                 "Expires": st.column_config.TextColumn("Expires", width="small"),
                 "Text": st.column_config.TextColumn(
                     "Text",
