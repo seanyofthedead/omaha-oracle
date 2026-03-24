@@ -5,21 +5,20 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from dashboard.data import DataLoadError, load_decisions
+from dashboard.data import DataLoadError, load_decisions, load_thesis_content
 from dashboard.fmt import fmt_date, fmt_datetime, fmt_null, render_export_button
 
 
 def _render_signal_card(d: dict) -> None:
-    """Render a single signal decision as a card."""
+    """Render a single signal decision as an expandable card with thesis."""
     signal = (d.get("signal") or "").upper()
     ticker = d.get("ticker", "")
     ts = fmt_datetime(d.get("timestamp"))
     payload = d.get("payload") or {}
 
     color = "green" if signal == "BUY" else "red" if signal == "SELL" else "gray"
-    with st.container(border=True):
-        st.subheader(f":{color}[{signal}]  {ticker}  —  {ts}")
 
+    with st.expander(f":{color}[{signal}]  {ticker}  —  {ts}", expanded=False):
         reasons = (
             payload.get("reasons_pass")
             or payload.get("reasons_fail")
@@ -31,6 +30,15 @@ def _render_signal_card(d: dict) -> None:
                 st.write(f"• {r}")
         if payload.get("reasoning"):
             st.caption(payload["reasoning"])
+
+        st.divider()
+
+        thesis = load_thesis_content(ticker) if ticker else None
+        if thesis:
+            st.markdown("**Investment Thesis**")
+            st.markdown(thesis)
+        else:
+            st.caption("No thesis available for this ticker.")
 
 
 def render() -> None:

@@ -331,6 +331,24 @@ def load_portfolio_history() -> dict[str, Any]:
 
 
 @st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
+def load_thesis_content(ticker: str) -> str | None:
+    """Load the latest thesis markdown for a ticker from S3."""
+    try:
+        cfg = get_config()
+        s3 = S3Client(bucket=cfg.s3_bucket)
+        # List thesis keys for this ticker
+        keys = s3.list_keys(prefix=f"theses/{ticker}/")
+        if not keys:
+            return None
+        # Get the latest one (sorted descending)
+        latest_key = sorted(keys, reverse=True)[0]
+        return s3.read_markdown(latest_key)
+    except Exception as exc:
+        _log.warning("load_thesis_content failed", extra={"ticker": ticker, "error": str(exc)})
+        return None  # Non-critical — just won't show thesis
+
+
+@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
 def load_config_thresholds() -> dict[str, Any]:
     """Load screening thresholds from config table."""
     try:
