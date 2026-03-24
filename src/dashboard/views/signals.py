@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
+import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.data import DataLoadError, load_decisions
 from dashboard.fmt import fmt_date, fmt_datetime, fmt_null
+
+PAGE_SIZE = 10
 
 
 def _render_signal_card(d: dict) -> None:
@@ -32,6 +37,64 @@ def _render_signal_card(d: dict) -> None:
             st.caption(payload["reasoning"])
 
 
+def _render_paginated_cards(signals: list[dict], tab_name: str) -> None:
+    """Render signal cards with pagination controls."""
+    if not signals:
+        if tab_name == "buys":
+            st.info(
+                "No BUY signals in this range. "
+                "The quant screen may not have found "
+                "candidates meeting all thresholds."
+            )
+        elif tab_name == "sells":
+            st.info(
+                "No SELL signals in this range. "
+                "Positions are held until the thesis is "
+                "invalidated or the price exceeds "
+                "intrinsic value."
+            )
+        else:
+            st.info("No signals match the current filters.")
+        return
+
+    page_key = f"signals_page_{tab_name}"
+    if page_key not in st.session_state:
+        st.session_state[page_key] = 0
+
+    total_pages = max(1, (len(signals) + PAGE_SIZE - 1) // PAGE_SIZE)
+    st.session_state[page_key] = min(st.session_state[page_key], total_pages - 1)
+
+    start_idx = st.session_state[page_key] * PAGE_SIZE
+    end_idx = start_idx + PAGE_SIZE
+    page_slice = signals[start_idx:end_idx]
+
+    for d in page_slice:
+        _render_signal_card(d)
+
+    if total_pages > 1:
+        col_prev, col_info, col_next = st.columns([1, 2, 1])
+        with col_prev:
+            if st.button(
+                "\u2190 Previous",
+                disabled=st.session_state[page_key] == 0,
+                key=f"prev_{tab_name}",
+            ):
+                st.session_state[page_key] -= 1
+                st.rerun()
+        with col_info:
+            st.caption(
+                f"Page {st.session_state[page_key] + 1} of {total_pages}"
+            )
+        with col_next:
+            if st.button(
+                "Next \u2192",
+                disabled=st.session_state[page_key] >= total_pages - 1,
+                key=f"next_{tab_name}",
+            ):
+                st.session_state[page_key] += 1
+                st.rerun()
+
+
 def render() -> None:
     """Render the Signals page."""
     st.title("Signals")
@@ -49,6 +112,16 @@ def render() -> None:
         help="Number of recent decisions to display. Increase to see older signals.",
     )
 
+    st.sidebar.text_input("Filter by ticker", key="signal_ticker_filter")
+
+    today = datetime.now().date()
+    default_start = today - timedelta(days=90)
+    st.sidebar.date_input(
+        "Date range",
+        value=(default_start, today),
+        key="signal_date_range",
+    )
+
     try:
         with st.spinner("Loading recent buy/sell decisions..."):
             decisions = load_decisions(limit=limit)
@@ -56,20 +129,48 @@ def render() -> None:
         st.error(str(exc))
         return
 
+    # ── Apply filters ──
+    filtered = decisions
+
+    ticker_filter = st.session_state.get("signal_ticker_filter", "").strip().upper()
+    if ticker_filter:
+        filtered = [
+            d for d in filtered if ticker_filter in d.get("ticker", "").upper()
+        ]
+
+    date_range = st.session_state.get("signal_date_range")
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        start_str, end_str = str(date_range[0]), str(date_range[1])
+        filtered = [
+            d
+            for d in filtered
+            if start_str <= d.get("timestamp", "")[:10] <= end_str
+        ]
+
     # Classify decisions
-    buy_decisions = [d for d in decisions if (d.get("signal") or "").upper() == "BUY"]
-    sell_decisions = [d for d in decisions if (d.get("signal") or "").upper() == "SELL"]
-    other_decisions = [
-        d for d in decisions if (d.get("signal") or "").upper() not in ("BUY", "SELL")
+    buy_decisions = [
+        d for d in filtered if (d.get("signal") or "").upper() == "BUY"
     ]
-    latest_ts = fmt_date(decisions[0].get("timestamp")) if decisions else fmt_null(None)
+    sell_decisions = [
+        d for d in filtered if (d.get("signal") or "").upper() == "SELL"
+    ]
+    other_decisions = [
+        d
+        for d in filtered
+        if (d.get("signal") or "").upper() not in ("BUY", "SELL")
+    ]
+    latest_ts = (
+        fmt_date(filtered[0].get("timestamp")) if filtered else fmt_null(None)
+    )
 
     # ── Tier 1: Hero metrics ──
-    col1, col2, col3, col4 = st.columns(4, gap="large", vertical_alignment="bottom")
+    col1, col2, col3, col4 = st.columns(
+        4, gap="large", vertical_alignment="bottom"
+    )
     with col1:
         st.metric(
             "Total Signals",
-            len(decisions),
+            len(filtered),
             help="All decisions in the selected range, including buys, sells, and holds.",
         )
     with col2:
@@ -114,6 +215,8 @@ def render() -> None:
 
     st.divider()
 
+    st.caption(f"Showing {len(filtered)} of {len(decisions)} signals")
+
     if not decisions:
         st.info(
             "No decisions on record for this range. "
@@ -127,39 +230,72 @@ def render() -> None:
             f"Showing {len(decisions)} signals "
             f"({len(buy_decisions)} buys, "
             f"{len(sell_decisions)} sells)",
-            icon="✅",
+            icon="\u2705",
         )
         st.session_state.page_toast_shown = True
 
     # ── Tier 2: Primary content in tabs ──
-    tab_all, tab_buys, tab_sells = st.tabs(["All Signals", "Buys", "Sells"])
+    tab_all, tab_buys, tab_sells, tab_timeline = st.tabs(
+        ["All Signals", "Buys", "Sells", "Timeline"]
+    )
 
     with tab_all:
-        for d in decisions:
-            _render_signal_card(d)
+        _render_paginated_cards(filtered, "all")
 
     with tab_buys:
-        if buy_decisions:
-            for d in buy_decisions:
-                _render_signal_card(d)
-        else:
-            st.info(
-                "No BUY signals in this range. "
-                "The quant screen may not have found "
-                "candidates meeting all thresholds."
-            )
+        _render_paginated_cards(buy_decisions, "buys")
 
     with tab_sells:
-        if sell_decisions:
-            for d in sell_decisions:
-                _render_signal_card(d)
-        else:
-            st.info(
-                "No SELL signals in this range. "
-                "Positions are held until the thesis is "
-                "invalidated or the price exceeds "
-                "intrinsic value."
+        _render_paginated_cards(sell_decisions, "sells")
+
+    with tab_timeline:
+        if filtered:
+            fig = go.Figure()
+
+            if buy_decisions:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[d["timestamp"][:10] for d in buy_decisions],
+                        y=[d.get("ticker", "") for d in buy_decisions],
+                        mode="markers",
+                        name="BUY",
+                        marker=dict(
+                            color="#4CAF50", size=12, symbol="triangle-up"
+                        ),
+                    )
+                )
+            if sell_decisions:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[d["timestamp"][:10] for d in sell_decisions],
+                        y=[d.get("ticker", "") for d in sell_decisions],
+                        mode="markers",
+                        name="SELL",
+                        marker=dict(
+                            color="#F44336", size=12, symbol="triangle-down"
+                        ),
+                    )
+                )
+            if other_decisions:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[d["timestamp"][:10] for d in other_decisions],
+                        y=[d.get("ticker", "") for d in other_decisions],
+                        mode="markers",
+                        name="Other",
+                        marker=dict(color="#888888", size=8),
+                    )
+                )
+
+            fig.update_layout(
+                template="omaha_oracle",
+                xaxis_title="Date",
+                yaxis_title="Ticker",
+                height=400,
             )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No signals to display on timeline.")
 
     # ── Tier 3: Supplementary content ──
     if other_decisions:
