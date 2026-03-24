@@ -35,6 +35,21 @@ def render() -> None:
     total = data.get("portfolio_value", 0)
     positions = data.get("positions", [])
 
+    # Check for position drill-down
+    if "selected_position" in st.session_state:
+        from dashboard.views.position_detail import render_position_detail
+
+        selected_ticker = st.session_state.selected_position
+        position = next(
+            (p for p in positions if p.get("ticker") == selected_ticker),
+            None,
+        )
+        if position:
+            render_position_detail(position, data.get("portfolio_value", 0))
+            return
+        else:
+            st.session_state.pop("selected_position", None)
+
     # ── Health Score Gauge ──
     health = compute_health_score(data)
     gauge_col, detail_col = st.columns([1, 2])
@@ -195,6 +210,16 @@ def render() -> None:
                 height=min(len(pos_rows) * 35 + 38, 400),
             )
             render_export_button(pos_df, "positions", label="Download Positions CSV")
+        # Position drill-down navigation
+        if positions:
+            tickers = [p.get("ticker", "") for p in positions if p.get("ticker")]
+            if tickers:
+                selected = st.selectbox(
+                    "View position details", [""] + tickers, key="position_select"
+                )
+                if selected:
+                    st.session_state.selected_position = selected
+                    st.rerun()
 
     with tab_allocation:
         # Sector allocation breakdown
