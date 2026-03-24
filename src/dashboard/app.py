@@ -40,6 +40,7 @@ _PAGE_MODULES = {
     "Company Search": "dashboard.views.company_search",
     "Paper Trading": "dashboard.views.paper_trading",
     "Backtest": "dashboard.views.backtest",
+    "Prompt Lab": "dashboard.views.prompt_lab",
 }
 
 
