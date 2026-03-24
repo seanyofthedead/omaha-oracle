@@ -56,6 +56,40 @@ def render() -> None:
         st.error(str(exc))
         return
 
+    # Track last-seen signal timestamp
+    if decisions:
+        latest_signal_ts = decisions[0].get("timestamp", "")
+        last_seen = st.session_state.get("last_seen_signal_ts", "")
+
+        if last_seen and latest_signal_ts > last_seen:
+            # Count new signals since last visit
+            new_count = sum(1 for d in decisions if d.get("timestamp", "") > last_seen)
+            new_buys = sum(
+                1
+                for d in decisions
+                if d.get("timestamp", "") > last_seen
+                and (d.get("signal") or "").upper() == "BUY"
+            )
+            new_sells = sum(
+                1
+                for d in decisions
+                if d.get("timestamp", "") > last_seen
+                and (d.get("signal") or "").upper() == "SELL"
+            )
+
+            parts = []
+            if new_buys:
+                parts.append(f"{new_buys} BUY")
+            if new_sells:
+                parts.append(f"{new_sells} SELL")
+            label = " and ".join(parts) if parts else f"{new_count} new"
+            st.toast(
+                f"{label} signal{'s' if new_count > 1 else ''} since your last visit",
+                icon=":material/notifications:",
+            )
+
+        st.session_state.last_seen_signal_ts = latest_signal_ts
+
     # Classify decisions
     buy_decisions = [d for d in decisions if (d.get("signal") or "").upper() == "BUY"]
     sell_decisions = [d for d in decisions if (d.get("signal") or "").upper() == "SELL"]
