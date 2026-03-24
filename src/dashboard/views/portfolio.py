@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.data import DataLoadError, load_portfolio
@@ -12,6 +13,7 @@ from dashboard.fmt import (
     fmt_delta,
     fmt_pct,
 )
+from dashboard.health_score import compute_health_score
 
 
 def render() -> None:
@@ -31,6 +33,46 @@ def render() -> None:
     cash = data.get("cash", 0)
     total = data.get("portfolio_value", 0)
     positions = data.get("positions", [])
+
+    # ── Health Score Gauge ──
+    health = compute_health_score(data)
+    gauge_col, detail_col = st.columns([1, 2])
+
+    with gauge_col:
+        fig = go.Figure(
+            go.Indicator(
+                mode="gauge+number",
+                value=health["total_score"],
+                title={
+                    "text": f"Portfolio Health ({health['grade']})",
+                    "font": {"size": 16},
+                },
+                gauge={
+                    "axis": {"range": [0, 100], "tickwidth": 1},
+                    "bar": {"color": "#6C9EFF"},
+                    "steps": [
+                        {"range": [0, 40], "color": "rgba(244,67,54,0.2)"},
+                        {"range": [40, 60], "color": "rgba(255,152,0,0.2)"},
+                        {"range": [60, 75], "color": "rgba(255,235,59,0.2)"},
+                        {"range": [75, 100], "color": "rgba(76,175,80,0.2)"},
+                    ],
+                },
+            )
+        )
+        fig.update_layout(
+            template="omaha_oracle",
+            height=220,
+            margin=dict(t=40, b=0, l=30, r=30),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with detail_col:
+        comp = health["components"]
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1.metric("Cash Reserve", f"{comp['cash_reserve']}/25")
+        sc2.metric("Diversification", f"{comp['diversification']}/25")
+        sc3.metric("Position Sizing", f"{comp['position_sizing']}/25")
+        sc4.metric("Activity", f"{comp['activity']}/25")
 
     # Compute aggregate gain/loss
     total_cost = sum(p.get("cost_basis", 0) or 0 for p in positions)
@@ -182,8 +224,6 @@ def render() -> None:
                         f"{row['Weight']} — exceeds the 35% "
                         "sector concentration limit."
                     )
-
-            import plotly.graph_objects as go
 
             from dashboard.charts import (
                 ACCENT_BLUE,
