@@ -40,6 +40,9 @@ EXPECTED_PAGES = {
     "Upload Analysis": "dashboard.views.upload_analysis",
     "Company Search": "dashboard.views.company_search",
     "Paper Trading": "dashboard.views.paper_trading",
+    "Backtest": "dashboard.views.backtest",
+    "Prompt Lab": "dashboard.views.prompt_lab",
+    "Sector Insights": "dashboard.views.sectors",
 }
 
 
@@ -87,6 +90,10 @@ class TestViewsDirectoryContents:
         "analytics.py",
         "order_entry.py",
         "options_ui.py",
+        "backtest.py",
+        "prompt_lab.py",
+        "sectors.py",
+        "position_detail.py",
     }
 
     def test_all_page_files_present(self):
@@ -125,8 +132,8 @@ class TestPageModuleMapping:
                 "This would import from the renamed directory and fail at runtime."
             )
 
-    def test_all_nine_pages_registered(self):
-        assert len(self._get_page_modules()) == 9
+    def test_all_pages_registered(self):
+        assert len(self._get_page_modules()) == 12
 
 
 # ---------------------------------------------------------------------------

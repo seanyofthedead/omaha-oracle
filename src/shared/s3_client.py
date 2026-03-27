@@ -108,10 +108,32 @@ class S3Client:
             )
             return data
         except ClientError as exc:
-            _log.error(
+            error_code = exc.response["Error"]["Code"]
+            log_level = "warning" if error_code == "NoSuchKey" else "error"
+            getattr(_log, log_level)(
                 "S3 read_json failed",
-                extra={"bucket": self._bucket, "key": key, "error": str(exc)},
+                extra={"bucket": self._bucket, "key": key, "error_code": error_code},
             )
+            raise
+
+    def read_json_safe(self, key: str) -> Any | None:
+        """
+        Download *key* and deserialise it as JSON, returning ``None`` if the
+        key does not exist.
+
+        Unlike :meth:`read_json`, a missing key does not raise — it logs a
+        debug message and returns ``None``.  Other errors (permissions, invalid
+        JSON) are still raised.
+        """
+        try:
+            return self.read_json(key)
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "NoSuchKey":
+                _log.debug(
+                    "S3 key not found (safe read)",
+                    extra={"bucket": self._bucket, "key": key},
+                )
+                return None
             raise
 
     # ------------------------------------------------------------------ #

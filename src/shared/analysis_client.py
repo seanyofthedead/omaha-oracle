@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from shared.logger import get_logger
+
+_log = get_logger(__name__)
+
 
 def merge_latest_analysis(
     items: list[dict[str, Any]],
@@ -81,9 +85,16 @@ def load_latest_analysis(
     from shared.dynamo_client import DynamoClient
 
     client = DynamoClient(table_name)
-    items = client.query(
-        Key("ticker").eq(ticker),
-        scan_forward=False,
-        limit=limit,
-    )
+    try:
+        items = client.query(
+            Key("ticker").eq(ticker),
+            scan_forward=False,
+            limit=limit,
+        )
+    except Exception:
+        _log.error(
+            "Failed to query analysis table for ticker",
+            extra={"table": table_name, "ticker": ticker},
+        )
+        raise
     return merge_latest_analysis(items, ticker)

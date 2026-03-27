@@ -292,6 +292,10 @@ def _extract_text(response: anthropic.types.Message) -> str:
     for block in response.content:
         if hasattr(block, "text"):
             return str(block.text)
+    _log.warning(
+        "Anthropic response contained no text blocks",
+        extra={"stop_reason": response.stop_reason, "block_count": len(response.content)},
+    )
     return ""
 
 

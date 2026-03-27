@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import yfinance as yf
@@ -181,11 +182,20 @@ def run_backtest(
         wins = sum(1 for v in completed_trades.values() if v > 0)
         total_closed = len([t for t in trades if t["signal"] == "SELL"])
         win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
+
+        # --- Enhanced metrics ---
+        sharpe_ratio, sortino_ratio, calmar_ratio, avg_trade_return_pct = (
+            _compute_enhanced_metrics(portfolio_values, trades, max_dd)
+        )
     else:
         total_return = 0
         spy_return = 0
         max_dd = 0
         win_rate = 0
+        sharpe_ratio = 0.0
+        sortino_ratio = 0.0
+        calmar_ratio = 0.0
+        avg_trade_return_pct = 0.0
 
     return {
         "dates": dates,
@@ -200,8 +210,91 @@ def run_backtest(
             "win_rate_pct": round(win_rate, 1),
             "total_trades": len(trades),
             "open_positions": len(positions),
+            "sharpe_ratio": round(sharpe_ratio, 4),
+            "sortino_ratio": round(sortino_ratio, 4),
+            "calmar_ratio": round(calmar_ratio, 4),
+            "avg_trade_return_pct": round(avg_trade_return_pct, 4),
         },
     }
+
+
+def _compute_enhanced_metrics(
+    portfolio_values: list[float],
+    trades: list[dict],
+    max_dd: float,
+) -> tuple[float, float, float, float]:
+    """Compute Sharpe, Sortino, Calmar ratios and avg trade return.
+
+    Parameters
+    ----------
+    portfolio_values : daily portfolio value series
+    trades : list of trade dicts with signal, price, ticker keys
+    max_dd : max drawdown in percent (already computed)
+
+    Returns
+    -------
+    (sharpe_ratio, sortino_ratio, calmar_ratio, avg_trade_return_pct)
+    """
+    TRADING_DAYS = 252
+
+    # Daily returns
+    daily_returns: list[float] = []
+    for i in range(1, len(portfolio_values)):
+        prev = portfolio_values[i - 1]
+        if prev > 0:
+            daily_returns.append(portfolio_values[i] / prev - 1)
+
+    if not daily_returns:
+        return 0.0, 0.0, 0.0, 0.0
+
+    mean_ret = sum(daily_returns) / len(daily_returns)
+
+    # Sharpe ratio (risk-free rate = 0)
+    variance = sum((r - mean_ret) ** 2 for r in daily_returns) / len(daily_returns)
+    std_ret = math.sqrt(variance)
+    sharpe_ratio = (
+        (mean_ret / std_ret) * math.sqrt(TRADING_DAYS) if std_ret > 0 else 0.0
+    )
+
+    # Sortino ratio (downside deviation only)
+    downside_sq = [r**2 for r in daily_returns if r < 0]
+    if downside_sq:
+        downside_dev = math.sqrt(sum(downside_sq) / len(daily_returns))
+        sortino_ratio = (
+            (mean_ret / downside_dev) * math.sqrt(TRADING_DAYS)
+            if downside_dev > 0
+            else 0.0
+        )
+    else:
+        sortino_ratio = 0.0
+
+    # Calmar ratio: annualized return / max drawdown
+    n_days = len(daily_returns)
+    total_return_frac = portfolio_values[-1] / portfolio_values[0] - 1
+    annualized_return = (
+        (1 + total_return_frac) ** (TRADING_DAYS / n_days) - 1 if n_days > 0 else 0
+    )
+    calmar_ratio = (
+        (annualized_return * 100 / max_dd) if max_dd > 0 else 0.0
+    )
+
+    # Average trade return (completed round-trips)
+    buy_prices: dict[str, float] = {}
+    trade_returns: list[float] = []
+    for t in trades:
+        ticker = t["ticker"]
+        if t["signal"] == "BUY":
+            buy_prices[ticker] = t["price"]
+        elif t["signal"] == "SELL" and ticker in buy_prices:
+            entry = buy_prices.pop(ticker)
+            if entry > 0:
+                trade_returns.append((t["price"] - entry) / entry * 100)
+
+    avg_trade_return_pct = (
+        sum(trade_returns) / len(trade_returns) if trade_returns else 0.0
+    )
+
+    return sharpe_ratio, sortino_ratio, calmar_ratio, avg_trade_return_pct
 
 
 def _empty_result() -> dict[str, Any]:
@@ -218,5 +311,9 @@ def _empty_result() -> dict[str, Any]:
             "win_rate_pct": 0,
             "total_trades": 0,
             "open_positions": 0,
+            "sharpe_ratio": 0.0,
+            "sortino_ratio": 0.0,
+            "calmar_ratio": 0.0,
+            "avg_trade_return_pct": 0.0,
         },
     }
