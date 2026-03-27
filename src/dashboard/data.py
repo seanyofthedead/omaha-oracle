@@ -145,16 +145,40 @@ def load_watchlist_analysis() -> list[dict[str, Any]]:
 
 @st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
 def load_decisions(limit: int = 50) -> list[dict[str, Any]]:
-    """Load recent decisions (buy/sell signals) sorted by timestamp."""
+    """Load recent decisions (buy/sell signals) sorted by timestamp.
+
+    Tries the ``record_type-timestamp-index`` GSI first.  If the GSI does not
+    exist yet (table created before ``cdk deploy`` added it), falls back to a
+    full-table scan filtered client-side.
+    """
     try:
         cfg = get_config()
         client = DynamoClient(cfg.table_decisions)
-        return client.query(
-            Key("record_type").eq("DECISION"),
-            index_name="record_type-timestamp-index",
-            scan_forward=False,
-            limit=limit,
-        )
+        try:
+            return client.query(
+                Key("record_type").eq("DECISION"),
+                index_name="record_type-timestamp-index",
+                scan_forward=False,
+                limit=limit,
+            )
+        except ClientError as gsi_exc:
+            code = gsi_exc.response.get("Error", {}).get("Code", "")
+            if code != "ValidationException":
+                raise
+            # GSI missing — fall back to scan
+            _log.warning(
+                "GSI record_type-timestamp-index not found on decisions table, "
+                "falling back to scan. Run 'cdk deploy' to create the index.",
+            )
+            all_items = client.scan_all()
+            decisions = [
+                item for item in all_items
+                if item.get("record_type") == "DECISION"
+            ]
+            decisions.sort(key=lambda d: d.get("timestamp", ""), reverse=True)
+            return decisions[:limit]
+    except DataLoadError:
+        raise
     except Exception as exc:
         _log.warning("load_decisions failed", extra={"error": str(exc)})
         raise DataLoadError(_friendly_aws_message(exc, "buy/sell decisions")) from exc
