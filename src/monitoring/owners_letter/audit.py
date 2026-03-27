@@ -203,6 +203,22 @@ def run_outcome_audit(
             if outcome == "BAD_BUY":
                 bad_buy_moat_scores.append(safe_float(payload.get("moat_score")))
 
+        # Summarize prediction outcomes if present
+        prediction_summary = None
+        preds = payload.get("predictions")
+        if preds and isinstance(preds, list):
+            pred_confirmed = sum(1 for p in preds if isinstance(p, dict) and p.get("status") == "CONFIRMED")
+            pred_falsified = sum(1 for p in preds if isinstance(p, dict) and p.get("status") == "FALSIFIED")
+            pred_pending = sum(1 for p in preds if isinstance(p, dict) and p.get("status") == "pending")
+            pred_unresolvable = sum(1 for p in preds if isinstance(p, dict) and p.get("status") == "UNRESOLVABLE")
+            prediction_summary = {
+                "total": len(preds),
+                "confirmed": pred_confirmed,
+                "falsified": pred_falsified,
+                "pending": pred_pending,
+                "unresolvable": pred_unresolvable,
+            }
+
         audits.append(
             {
                 "decision_id": item.get("decision_id"),
@@ -213,8 +229,20 @@ def run_outcome_audit(
                 "current_price": current_price,  # may be None if price fetch failed
                 "outcome": outcome,
                 "payload": payload,
+                "prediction_summary": prediction_summary,
             }
         )
+
+    # Aggregate prediction accuracy across all decisions
+    total_preds = 0
+    total_confirmed = 0
+    total_falsified = 0
+    for audit in audits:
+        ps = audit.get("prediction_summary")
+        if ps:
+            total_confirmed += ps["confirmed"]
+            total_falsified += ps["falsified"]
+            total_preds += ps["total"]
 
     summary = {
         "total_decisions": len(audits),
@@ -223,5 +251,15 @@ def run_outcome_audit(
         "avg_moat_score_on_bad_buys": (
             sum(bad_buy_moat_scores) / len(bad_buy_moat_scores) if bad_buy_moat_scores else 0
         ),
+        "prediction_stats": {
+            "total_predictions": total_preds,
+            "confirmed": total_confirmed,
+            "falsified": total_falsified,
+            "accuracy": (
+                total_confirmed / (total_confirmed + total_falsified)
+                if (total_confirmed + total_falsified) > 0
+                else None
+            ),
+        },
     }
     return audits, summary

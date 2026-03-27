@@ -66,11 +66,25 @@ def generate_letter(
     audit_text = json.dumps(decision_audit, indent=2, default=str)
     portfolio_text = json.dumps(portfolio_summary, indent=2, default=str)
 
+    # Build prediction accuracy context if available
+    pred_stats = audit_summary.get("prediction_stats", {})
+    prediction_context = ""
+    if pred_stats.get("total_predictions", 0) > 0:
+        accuracy = pred_stats.get("accuracy")
+        accuracy_str = f"{accuracy:.0%}" if accuracy is not None else "N/A"
+        prediction_context = (
+            f"\n\n## Prediction Accuracy\n"
+            f"Total predictions evaluated: {pred_stats['total_predictions']}\n"
+            f"Confirmed: {pred_stats['confirmed']}, "
+            f"Falsified: {pred_stats['falsified']}\n"
+            f"Accuracy: {accuracy_str}\n"
+        )
+
     system_prompt = template.replace("{{quarter}}", quarter)
     system_prompt = system_prompt.replace("{{audit_summary}}", json.dumps(audit_summary, indent=2))
     system_prompt = system_prompt.replace("{{decision_audit}}", audit_text)
     system_prompt = system_prompt.replace("{{portfolio_summary}}", portfolio_text)
-    system_prompt = system_prompt.replace("{{previous_lessons}}", previous_lessons)
+    system_prompt = system_prompt.replace("{{previous_lessons}}", previous_lessons + prediction_context)
 
     user_prompt = f"Write the full Owner's Letter for {quarter}. Be brutally honest."
 
