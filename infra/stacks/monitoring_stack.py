@@ -249,6 +249,29 @@ class MonitoringStack(cdk.Stack):
         )
 
         # ---------------------------------------------------------------- #
+        # Prediction evaluator Lambda                                      #
+        # ---------------------------------------------------------------- #
+
+        self.fn_prediction_evaluator = _fn(
+            "FnPredictionEvaluator",
+            "monitoring.prediction_evaluator.handler.handler",
+            "Weekly evaluation of falsifiable predictions; generates micro-lessons",
+            memory_size=256,
+            timeout=Duration.minutes(5),
+        )
+
+        prediction_eval_rule = events.Rule(
+            self,
+            "PredictionEvalSchedule",
+            rule_name=f"{prefix}-prediction-eval-schedule",
+            description="Trigger prediction evaluator Lambda every Wednesday at 07:00 UTC",
+            schedule=events.Schedule.cron(hour="7", minute="0", week_day="WED"),
+        )
+        prediction_eval_rule.add_target(
+            targets.LambdaFunction(self.fn_prediction_evaluator)
+        )
+
+        # ---------------------------------------------------------------- #
         # Alerts Lambda (on-demand, invoked by other Lambdas)              #
         # ---------------------------------------------------------------- #
 
@@ -278,3 +301,8 @@ class MonitoringStack(cdk.Stack):
         cdk.CfnOutput(self, "AlertTopicArn", value=self.alert_topic.topic_arn)
         cdk.CfnOutput(self, "CostMonitorFnArn", value=self.fn_cost_monitor.function_arn)
         cdk.CfnOutput(self, "OwnersLetterFnArn", value=self.fn_owners_letter.function_arn)
+        cdk.CfnOutput(
+            self,
+            "PredictionEvaluatorFnArn",
+            value=self.fn_prediction_evaluator.function_arn,
+        )
