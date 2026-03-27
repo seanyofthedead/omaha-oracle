@@ -8,12 +8,14 @@ Output: markdown stored to S3 at theses/{ticker}/{date}.md
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from shared.config import get_config
 from shared.converters import normalize_ticker, safe_float, safe_int, today_str
 from shared.dynamo_client import store_analysis_result
-from shared.llm_client import LLMClient
+from shared.llm_client import BudgetExhaustedError, LLMClient
 from shared.logger import get_logger
 from shared.s3_client import S3Client
 
@@ -74,6 +76,38 @@ MOAT_MIN = 7
 MGMT_MIN = 6
 MOS_MIN = 0.30
 
+# --- Prediction extraction constants ---
+
+ALLOWED_METRICS = frozenset({
+    "revenue",
+    "earnings_per_share",
+    "gross_margin",
+    "operating_margin",
+    "net_margin",
+    "book_value_per_share",
+    "debt_to_equity",
+    "free_cash_flow",
+    "return_on_equity",
+    "stock_price",
+})
+
+METRIC_TO_STAGE: dict[str, str] = {
+    "revenue": "intrinsic_value",
+    "earnings_per_share": "intrinsic_value",
+    "free_cash_flow": "intrinsic_value",
+    "stock_price": "intrinsic_value",
+    "gross_margin": "moat_analysis",
+    "operating_margin": "moat_analysis",
+    "net_margin": "moat_analysis",
+    "return_on_equity": "moat_analysis",
+    "book_value_per_share": "quant_screen",
+    "debt_to_equity": "quant_screen",
+}
+
+ALLOWED_OPERATORS = frozenset({">", "<", ">=", "<=", "=="})
+
+_PREDICTION_PROMPT_PATH = Path(__file__).resolve().parent.parent.parent.parent / "prompts" / "prediction_extraction.md"
+
 
 def _passes_all_stages(event: dict[str, Any]) -> tuple[bool, str]:
     """Check quant passed, moat ≥7, mgmt ≥6, MoS >30%. Returns (passed, reason)."""
@@ -103,6 +137,112 @@ def _summarise(obj: dict[str, Any] | None, max_len: int = 500) -> str:
         return "No data."
     s = json.dumps(obj, indent=0, default=str)
     return s[:max_len] + "..." if len(s) > max_len else s
+
+
+def _validate_prediction(pred: dict[str, Any]) -> bool:
+    """Return True if a single prediction dict has all required fields and valid values."""
+    metric = pred.get("metric", "")
+    operator = pred.get("operator", "")
+    threshold = pred.get("threshold")
+    deadline = pred.get("deadline", "")
+    if metric not in ALLOWED_METRICS:
+        return False
+    if operator not in ALLOWED_OPERATORS:
+        return False
+    if threshold is None:
+        return False
+    try:
+        float(threshold)
+    except (TypeError, ValueError):
+        return False
+    if not deadline:
+        return False
+    try:
+        datetime.strptime(deadline, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
+def _extract_predictions(
+    client: LLMClient,
+    thesis_md: str,
+    ticker: str,
+    company_name: str,
+    sector: str,
+) -> list[dict[str, Any]]:
+    """Extract structured falsifiable predictions from a thesis via a cheap LLM call.
+
+    Returns a list of 0-3 validated prediction dicts. Returns [] on any failure.
+    """
+    try:
+        template = _PREDICTION_PROMPT_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        _log.warning("Prediction extraction prompt not found", extra={"ticker": ticker})
+        return []
+
+    current_date = today_str()
+    system_prompt = template.replace("{{ticker}}", ticker)
+    system_prompt = system_prompt.replace("{{company_name}}", company_name)
+    system_prompt = system_prompt.replace("{{sector}}", sector or "Unknown")
+    system_prompt = system_prompt.replace("{{current_date}}", current_date)
+    system_prompt = system_prompt.replace("{{thesis_markdown}}", thesis_md)
+
+    user_prompt = (
+        f"Extract 3 falsifiable quantitative predictions from the {ticker} investment thesis."
+    )
+
+    try:
+        response = client.invoke(
+            tier="bulk",
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            module="prediction_extraction",
+            ticker=ticker,
+            max_tokens=1024,
+            temperature=0.2,
+            require_json=True,
+        )
+    except BudgetExhaustedError:
+        _log.warning("Budget exhausted for prediction extraction", extra={"ticker": ticker})
+        return []
+    except Exception:
+        _log.exception("Prediction extraction LLM call failed", extra={"ticker": ticker})
+        return []
+
+    content = response.get("content", {})
+    if not isinstance(content, dict):
+        _log.warning("Prediction extraction returned non-dict", extra={"ticker": ticker})
+        return []
+
+    raw_preds = content.get("predictions", [])
+    if not isinstance(raw_preds, list):
+        return []
+
+    validated: list[dict[str, Any]] = []
+    for pred in raw_preds:
+        if not isinstance(pred, dict):
+            continue
+        if not _validate_prediction(pred):
+            _log.debug(
+                "Skipping invalid prediction",
+                extra={"ticker": ticker, "pred": pred},
+            )
+            continue
+        metric = pred["metric"]
+        validated.append({
+            "description": str(pred.get("description", "")),
+            "metric": metric,
+            "operator": pred["operator"],
+            "threshold": float(pred["threshold"]),
+            "data_source": pred.get("data_source", "yahoo_finance"),
+            "deadline": pred["deadline"],
+            "analysis_stage": METRIC_TO_STAGE.get(metric, "intrinsic_value"),
+        })
+        if len(validated) >= 3:
+            break
+
+    return validated
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -199,6 +339,16 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     result["thesis_generated"] = True
     result["skipped_reason"] = ""
     result["cost_usd"] = response.get("cost_usd")
+
+    # Extract structured falsifiable predictions from the thesis
+    sector = event.get("sector") or event.get("company_sector") or ""
+    predictions = _extract_predictions(client, thesis_md, ticker, company_name, sector)
+    result["predictions"] = predictions
+    if predictions:
+        _log.info(
+            "Predictions extracted",
+            extra={"ticker": ticker, "count": len(predictions)},
+        )
 
     store_analysis_result(
         cfg.table_analysis,
