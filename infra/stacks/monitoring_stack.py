@@ -32,12 +32,16 @@ from aws_cdk import (
     aws_lambda as lambda_,
 )
 from aws_cdk import (
+    aws_logs as logs,
+)
+from aws_cdk import (
     aws_sns as sns,
 )
 from aws_cdk import (
     aws_sns_subscriptions as sns_subscriptions,
 )
 from constructs import Construct
+
 
 class MonitoringStack(cdk.Stack):
     """
@@ -183,6 +187,8 @@ class MonitoringStack(cdk.Stack):
                 timeout=timeout,
                 environment=monitoring_env,
                 layers=[deps_layer],
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                tracing=lambda_.Tracing.ACTIVE,
             )
             fn.add_to_role_policy(data_policy)
             fn.add_to_role_policy(s3_policy)
