@@ -135,6 +135,7 @@ def evaluate_matured_predictions(
             actual = fetch_actual(
                 metric, ticker, data_source,
                 companies_client, financials_client,
+                as_of_date=deadline,
             )
 
             if actual is None:

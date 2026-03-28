@@ -3,12 +3,22 @@ Metric lookup for prediction evaluation.
 
 Maps prediction metric names to actual values from the companies and financials
 DynamoDB tables (already populated by Yahoo Finance and SEC EDGAR ingestion).
+
+SEC EDGAR stores one DynamoDB item per metric per fiscal period (e.g., a
+separate row for revenue, net_income, etc.). This module aggregates those
+rows by year before computing derived metrics like margins and ratios —
+matching the pattern in ``quant_screen/financials.py``.
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from boto3.dynamodb.conditions import Key
+
+from shared.converters import safe_float
 from shared.dynamo_client import DynamoClient
 from shared.logger import get_logger
 
@@ -49,12 +59,48 @@ _YF_METRIC_MAP: dict[str, str] = {
 }
 
 
+def _aggregate_financials_by_year(
+    items: list[dict[str, Any]],
+) -> dict[int, dict[str, float]]:
+    """Group one-item-per-metric financials records into {year: {metric: value}}.
+
+    Mirrors the pattern in ``quant_screen/financials.py``.
+    """
+    by_year: dict[int, dict[str, float]] = defaultdict(dict)
+    for it in items:
+        year: int | None = None
+        fy = it.get("fiscal_year")
+        if fy is not None:
+            try:
+                year = int(float(fy))
+            except (ValueError, TypeError):
+                pass
+        if year is None:
+            period = it.get("period_end_date") or it.get("period", "")
+            if "#" in str(period):
+                date_part = str(period).split("#")[0]
+            else:
+                date_part = str(period)
+            try:
+                year = int(date_part[:4]) if date_part else 0
+            except (ValueError, IndexError):
+                continue
+        metric_name = it.get("metric_name", "")
+        val = safe_float(it.get("value"))
+        if metric_name and year:
+            by_year[year][metric_name] = val
+    return dict(by_year)
+
+
 def _fetch_from_companies(
     companies_client: DynamoClient,
     ticker: str,
     metric: str,
 ) -> float | None:
-    """Fetch a metric from the companies table (Yahoo Finance data)."""
+    """Fetch a metric from the companies table (Yahoo Finance data).
+
+    The companies table stores current snapshots only — no historical data.
+    """
     item = companies_client.get_item({"ticker": ticker})
     if not item:
         return None
@@ -70,29 +116,69 @@ def _fetch_from_companies(
     return None
 
 
+def _fetch_historical_price(ticker: str, as_of_date: str) -> float | None:
+    """Fetch the stock price at a specific date using yfinance.
+
+    Follows the same pattern as ``owners_letter/audit.py:_fetch_price``.
+    """
+    try:
+        import yfinance as yf
+
+        dt = datetime.strptime(as_of_date, "%Y-%m-%d").replace(tzinfo=UTC)
+        t = yf.Ticker(ticker)
+        end = dt + timedelta(days=1)
+        df = t.history(start=dt.date(), end=end.date())
+        if df.empty:
+            # Try a wider range (±3 days) for weekends/holidays
+            start_wide = dt - timedelta(days=3)
+            df = t.history(start=start_wide.date(), end=end.date())
+            if df.empty:
+                return None
+        return float(df["Close"].iloc[-1])
+    except Exception as exc:
+        _log.warning(
+            "Historical price fetch failed",
+            extra={"ticker": ticker, "as_of_date": as_of_date, "error": str(exc)},
+        )
+        return None
+
+
 def _fetch_from_financials(
     financials_client: DynamoClient,
     ticker: str,
     metric: str,
+    as_of_date: str | None = None,
 ) -> float | None:
     """Fetch a derived metric from the financials table (SEC EDGAR data).
 
-    Financials store raw values (revenue, net_income, total_assets, etc.).
-    Margin metrics are computed from these.
+    SEC ingestion writes one DynamoDB item per metric per fiscal period
+    (e.g., ``period=2023-12-31#revenue``). This function queries ALL items
+    for the ticker, aggregates them by year, then extracts or computes the
+    requested metric from the most recent year on or before ``as_of_date``.
     """
-    from boto3.dynamodb.conditions import Key
-
-    items = financials_client.query(
-        Key("ticker").eq(ticker),
-        scan_forward=False,
-        limit=1,
-    )
+    items = financials_client.query(Key("ticker").eq(ticker))
     if not items:
         return None
-    latest = items[0]
-    metrics = latest.get("metrics") or latest
-    if not isinstance(metrics, dict):
+
+    by_year = _aggregate_financials_by_year(items)
+    if not by_year:
         return None
+
+    # Pick the most recent year on or before as_of_date
+    if as_of_date:
+        try:
+            cutoff_year = int(as_of_date[:4])
+        except (ValueError, IndexError):
+            cutoff_year = max(by_year.keys())
+        eligible_years = [y for y in by_year if y <= cutoff_year]
+    else:
+        eligible_years = list(by_year.keys())
+
+    if not eligible_years:
+        return None
+
+    latest_year = max(eligible_years)
+    metrics = by_year[latest_year]
 
     try:
         if metric == "revenue":
@@ -106,13 +192,14 @@ def _fetch_from_financials(
             return None
         if metric == "gross_margin":
             revenue = metrics.get("revenue")
-            # Gross margin not directly stored; try cost_of_revenue
             cogs = metrics.get("cost_of_revenue")
             if revenue and cogs:
                 return (float(revenue) - float(cogs)) / float(revenue)
+            # Try net_income / revenue as rough proxy if no COGS
             return None
         if metric == "operating_margin":
             revenue = metrics.get("revenue")
+            # Try operating_income or operating_cash_flow as proxy
             op_income = metrics.get("operating_income")
             if revenue and op_income:
                 return float(op_income) / float(revenue)
@@ -159,8 +246,17 @@ def fetch_actual(
     data_source: str,
     companies_client: DynamoClient,
     financials_client: DynamoClient,
+    as_of_date: str | None = None,
 ) -> float | None:
     """Fetch the actual value for a prediction metric.
+
+    Parameters
+    ----------
+    as_of_date:
+        ISO date (YYYY-MM-DD) at which the metric should be evaluated.
+        For stock_price, fetches the historical price at that date.
+        For SEC metrics, uses the most recent fiscal year on or before that date.
+        If None, uses the latest available data.
 
     Returns None if the metric cannot be resolved.
     """
@@ -168,22 +264,27 @@ def fetch_actual(
         _log.warning("Unknown metric", extra={"metric": metric, "ticker": ticker})
         return None
 
+    # For stock_price with a historical date, use yfinance directly
+    if metric == "stock_price" and as_of_date:
+        val = _fetch_historical_price(ticker, as_of_date)
+        if val is not None:
+            return val
+        # Fall through to companies table (current snapshot) as last resort
+
     if data_source == "yahoo_finance":
         val = _fetch_from_companies(companies_client, ticker, metric)
         if val is not None:
             return val
-        # Fall through to financials as backup
-        return _fetch_from_financials(financials_client, ticker, metric)
+        return _fetch_from_financials(financials_client, ticker, metric, as_of_date)
 
     if data_source == "sec_edgar":
-        val = _fetch_from_financials(financials_client, ticker, metric)
+        val = _fetch_from_financials(financials_client, ticker, metric, as_of_date)
         if val is not None:
             return val
-        # Fall through to companies as backup
         return _fetch_from_companies(companies_client, ticker, metric)
 
     # Unknown data source — try both
     val = _fetch_from_companies(companies_client, ticker, metric)
     if val is not None:
         return val
-    return _fetch_from_financials(financials_client, ticker, metric)
+    return _fetch_from_financials(financials_client, ticker, metric, as_of_date)

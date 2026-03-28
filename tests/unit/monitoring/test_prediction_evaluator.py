@@ -18,6 +18,11 @@ from monitoring.prediction_evaluator.lesson_generator import (
     _severity_from_miss,
     generate_lessons_from_results,
 )
+from monitoring.prediction_evaluator.metrics import (
+    _aggregate_financials_by_year,
+    _fetch_from_financials,
+    fetch_actual,
+)
 
 
 # --- Evaluator tests ---
@@ -92,9 +97,14 @@ class TestEvaluateMaturedPredictions:
 
         financials_client = MagicMock()
 
-        results = evaluate_matured_predictions(
-            decisions_client, companies_client, financials_client
-        )
+        # Mock historical price lookup (stock_price uses yfinance for as_of_date)
+        with patch(
+            "monitoring.prediction_evaluator.metrics._fetch_historical_price",
+            return_value=150.0,
+        ):
+            results = evaluate_matured_predictions(
+                decisions_client, companies_client, financials_client
+            )
 
         assert len(results) == 1
         assert results[0]["status"] == "CONFIRMED"
@@ -221,11 +231,145 @@ class TestEvaluateMaturedPredictions:
         companies_client = MagicMock()
         companies_client.get_item.return_value = {"ticker": "AAPL", "currentPrice": 150.0}
 
-        results = evaluate_matured_predictions(
-            decisions_client, companies_client, MagicMock()
-        )
+        with patch(
+            "monitoring.prediction_evaluator.metrics._fetch_historical_price",
+            return_value=150.0,
+        ):
+            results = evaluate_matured_predictions(
+                decisions_client, companies_client, MagicMock()
+            )
         assert len(results) == 1
         decisions_client.scan_all.assert_called_once()
+
+
+# --- Metrics aggregation tests ---
+
+
+class TestAggregateFinancialsByYear:
+    """Tests for the SEC EDGAR one-item-per-metric aggregation."""
+
+    def test_aggregates_multiple_metrics_into_year_dict(self):
+        items = [
+            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
+            {"ticker": "AAPL", "period": "2024-12-31#net_income", "metric_name": "net_income", "value": 100e9, "fiscal_year": 2024},
+            {"ticker": "AAPL", "period": "2024-12-31#stockholders_equity", "metric_name": "stockholders_equity", "value": 50e9, "fiscal_year": 2024},
+            {"ticker": "AAPL", "period": "2023-12-31#revenue", "metric_name": "revenue", "value": 380e9, "fiscal_year": 2023},
+        ]
+        result = _aggregate_financials_by_year(items)
+        assert 2024 in result
+        assert result[2024]["revenue"] == 400e9
+        assert result[2024]["net_income"] == 100e9
+        assert result[2024]["stockholders_equity"] == 50e9
+        assert 2023 in result
+        assert result[2023]["revenue"] == 380e9
+
+    def test_empty_items(self):
+        assert _aggregate_financials_by_year([]) == {}
+
+
+class TestFetchFromFinancialsAggregated:
+    """Tests that _fetch_from_financials correctly aggregates SEC data."""
+
+    def test_net_margin_from_aggregated_items(self):
+        """Multiple items for same year are aggregated to compute net_margin."""
+        financials_client = MagicMock()
+        financials_client.query.return_value = [
+            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
+            {"ticker": "AAPL", "period": "2024-12-31#net_income", "metric_name": "net_income", "value": 100e9, "fiscal_year": 2024},
+        ]
+        result = _fetch_from_financials(financials_client, "AAPL", "net_margin")
+        assert result is not None
+        assert abs(result - 0.25) < 0.001  # 100B / 400B = 25%
+
+    def test_revenue_direct_lookup(self):
+        financials_client = MagicMock()
+        financials_client.query.return_value = [
+            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
+        ]
+        result = _fetch_from_financials(financials_client, "AAPL", "revenue")
+        assert result == 400e9
+
+    def test_as_of_date_filters_to_correct_year(self):
+        """With as_of_date in 2023, should use 2023 data not 2024."""
+        financials_client = MagicMock()
+        financials_client.query.return_value = [
+            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
+            {"ticker": "AAPL", "period": "2023-12-31#revenue", "metric_name": "revenue", "value": 380e9, "fiscal_year": 2023},
+        ]
+        result = _fetch_from_financials(financials_client, "AAPL", "revenue", as_of_date="2023-12-31")
+        assert result == 380e9
+
+    def test_return_on_equity_from_aggregated(self):
+        financials_client = MagicMock()
+        financials_client.query.return_value = [
+            {"ticker": "AAPL", "period": "2024-12-31#net_income", "metric_name": "net_income", "value": 100e9, "fiscal_year": 2024},
+            {"ticker": "AAPL", "period": "2024-12-31#stockholders_equity", "metric_name": "stockholders_equity", "value": 50e9, "fiscal_year": 2024},
+        ]
+        result = _fetch_from_financials(financials_client, "AAPL", "return_on_equity")
+        assert result is not None
+        assert abs(result - 2.0) < 0.001  # 100B / 50B = 2.0
+
+    def test_empty_financials_returns_none(self):
+        financials_client = MagicMock()
+        financials_client.query.return_value = []
+        assert _fetch_from_financials(financials_client, "AAPL", "revenue") is None
+
+
+class TestFetchActualHistoricalPrice:
+    """Tests for stock_price with as_of_date using historical lookup."""
+
+    def test_stock_price_uses_historical_lookup(self):
+        companies_client = MagicMock()
+        financials_client = MagicMock()
+
+        with patch(
+            "monitoring.prediction_evaluator.metrics._fetch_historical_price",
+            return_value=155.0,
+        ) as mock_hist:
+            result = fetch_actual(
+                "stock_price", "AAPL", "yahoo_finance",
+                companies_client, financials_client,
+                as_of_date="2026-06-15",
+            )
+        assert result == 155.0
+        mock_hist.assert_called_once_with("AAPL", "2026-06-15")
+
+    def test_stock_price_falls_back_to_companies_if_historical_fails(self):
+        companies_client = MagicMock()
+        companies_client.get_item.return_value = {"ticker": "AAPL", "currentPrice": 160.0}
+        financials_client = MagicMock()
+        financials_client.query.return_value = []
+
+        with patch(
+            "monitoring.prediction_evaluator.metrics._fetch_historical_price",
+            return_value=None,
+        ):
+            result = fetch_actual(
+                "stock_price", "AAPL", "yahoo_finance",
+                companies_client, financials_client,
+                as_of_date="2026-06-15",
+            )
+        assert result == 160.0
+
+    def test_non_price_metric_ignores_historical_lookup(self):
+        """revenue should NOT trigger historical price lookup."""
+        companies_client = MagicMock()
+        companies_client.get_item.return_value = None
+        financials_client = MagicMock()
+        financials_client.query.return_value = [
+            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
+        ]
+
+        with patch(
+            "monitoring.prediction_evaluator.metrics._fetch_historical_price",
+        ) as mock_hist:
+            result = fetch_actual(
+                "revenue", "AAPL", "yahoo_finance",
+                companies_client, financials_client,
+                as_of_date="2024-12-31",
+            )
+        mock_hist.assert_not_called()
+        assert result == 400e9
 
 
 # --- Lesson generator tests ---
