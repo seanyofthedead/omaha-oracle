@@ -150,10 +150,7 @@ def load_decisions(limit: int = 50) -> list[dict[str, Any]]:
                 "falling back to scan. Run 'cdk deploy' to create the index.",
             )
             all_items = client.scan_all()
-            decisions = [
-                item for item in all_items
-                if item.get("record_type") == "DECISION"
-            ]
+            decisions = [item for item in all_items if item.get("record_type") == "DECISION"]
             decisions.sort(key=lambda d: d.get("timestamp", ""), reverse=True)
             return decisions[:limit]
     except DataLoadError:
@@ -190,12 +187,14 @@ def load_predictions() -> list[dict[str, Any]]:
         for pred in preds:
             if not isinstance(pred, dict):
                 continue
-            predictions.append({
-                **pred,
-                "ticker": ticker,
-                "decision_timestamp": decision_ts,
-                "decision_id": decision.get("decision_id", ""),
-            })
+            predictions.append(
+                {
+                    **pred,
+                    "ticker": ticker,
+                    "decision_timestamp": decision_ts,
+                    "decision_id": decision.get("decision_id", ""),
+                }
+            )
 
     # Sort: pending first (by deadline ascending), then evaluated (by deadline descending)
     def sort_key(p: dict) -> tuple:
@@ -234,9 +233,7 @@ def load_all_pipeline_candidates(analysis_date: str | None = None) -> list[dict[
             all_items = client.scan_all()
     except Exception as exc:
         _log.warning("load_all_pipeline_candidates failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "pipeline candidates")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "pipeline candidates")) from exc
 
     if not all_items:
         return []
@@ -264,9 +261,7 @@ def load_pipeline_run_dates() -> list[str]:
         all_items = client.scan_all()
     except Exception as exc:
         _log.warning("load_pipeline_run_dates failed", extra={"error": str(exc)})
-        raise DataLoadError(
-            _friendly_aws_message(exc, "pipeline run dates")
-        ) from exc
+        raise DataLoadError(_friendly_aws_message(exc, "pipeline run dates")) from exc
 
     dates: set[str] = set()
     for item in all_items:
@@ -275,5 +270,3 @@ def load_pipeline_run_dates() -> list[str]:
         if date_part:
             dates.add(date_part)
     return sorted(dates, reverse=True)
-
-

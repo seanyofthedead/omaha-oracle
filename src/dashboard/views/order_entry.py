@@ -13,7 +13,9 @@ from dashboard.alpaca_models import OrderInfo
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
-_OPEN_STATUSES = frozenset({"new", "partially_filled", "accepted", "pending_new", "pending_replace"})
+_OPEN_STATUSES = frozenset(
+    {"new", "partially_filled", "accepted", "pending_new", "pending_replace"}
+)
 
 # ── Validation ────────────────────────────────────────────────────────────
 
@@ -171,8 +173,6 @@ def render(client: AlpacaClient) -> None:
     import pandas as pd
     import streamlit as st
 
-    from dashboard.alpaca_errors import handle_alpaca_error
-
     tab_entry, tab_history = st.tabs(["Place Order", "Order History"])
 
     # ── Order Entry Tab ──────────────────────────────────────────────
@@ -199,14 +199,19 @@ def _render_order_form(client: AlpacaClient, st) -> None:
     with st.form("order_entry_form"):
         col1, col2 = st.columns(2)
         with col1:
-            symbol = st.text_input(
-                "Symbol",
-                placeholder="e.g. AAPL",
-                help="Ticker symbol (stocks, ETFs, or crypto)",
-            ).upper().strip()
+            symbol = (
+                st.text_input(
+                    "Symbol",
+                    placeholder="e.g. AAPL",
+                    help="Ticker symbol (stocks, ETFs, or crypto)",
+                )
+                .upper()
+                .strip()
+            )
             side = st.selectbox("Side", _SIDES, format_func=str.upper)
             order_type = st.selectbox(
-                "Order Type", _ORDER_TYPES,
+                "Order Type",
+                _ORDER_TYPES,
                 format_func=lambda x: x.upper().replace("_", " "),
             )
 
@@ -217,9 +222,11 @@ def _render_order_form(client: AlpacaClient, st) -> None:
                 help="Number of shares",
             )
             time_in_force = st.selectbox(
-                "Time in Force", _TIF_OPTIONS,
+                "Time in Force",
+                _TIF_OPTIONS,
                 format_func=str.upper,
-                help="DAY = end of day, GTC = until canceled, IOC = immediate or cancel, FOK = fill or kill",
+                help="DAY = end of day, GTC = until canceled, "
+                "IOC = immediate or cancel, FOK = fill or kill",
             )
             limit_price = st.text_input(
                 "Limit Price",
@@ -296,8 +303,10 @@ def _render_confirmation(client: AlpacaClient, st) -> None:
             )
             st.session_state.pending_order = None
             if ok:
-                st.success(f"Order submitted — {result.symbol} {result.side.upper()} "
-                           f"{result.qty} ({result.status.upper()})")
+                st.success(
+                    f"Order submitted — {result.symbol} {result.side.upper()} "
+                    f"{result.qty} ({result.status.upper()})"
+                )
             else:
                 st.error(result)
     with col_cancel:
@@ -320,7 +329,7 @@ def _render_order_history(client: AlpacaClient, st, pd) -> None:
         )
     with col_refresh:
         st.write("")  # spacer
-        refresh = st.button("Refresh", key="refresh_orders")
+        st.button("Refresh", key="refresh_orders")
 
     try:
         orders = client.get_orders()
@@ -347,7 +356,9 @@ def _render_order_history(client: AlpacaClient, st, pd) -> None:
     if open_orders:
         st.subheader("Cancel Open Orders")
         for order in open_orders:
-            label = f"Cancel {order.symbol} {order.side.upper()} {order.qty} ({order.order_id[:8]}…)"
+            label = (
+                f"Cancel {order.symbol} {order.side.upper()} {order.qty} ({order.order_id[:8]}…)"
+            )
             if st.button(label, key=f"cancel_{order.order_id}"):
                 ok, msg = cancel_order_safe(client, order.order_id)
                 if ok:

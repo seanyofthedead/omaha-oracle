@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from dashboard.candidate_generator import (
     SmartCandidateGenerator,
@@ -327,9 +327,7 @@ class TestSmartCandidateGenerator:
     def test_fallback_on_empty_screener(self, mock_universe, mock_yf, mock_fetch):
         mock_universe.return_value = {}
         mock_fetch.return_value = []  # Tier 1 returns nothing
-        mock_yf.screen.return_value = {
-            "quotes": [{"symbol": "FALLBACK", "trailingPE": 10.0}]
-        }
+        mock_yf.screen.return_value = {"quotes": [{"symbol": "FALLBACK", "trailingPE": 10.0}]}
         gen = SmartCandidateGenerator()
         batch = gen.generate_batch(10)
         assert "FALLBACK" in batch

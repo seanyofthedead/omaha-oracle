@@ -236,9 +236,7 @@ class AlpacaClient:
         raw = self._client.get_watchlists()
         return [_to_watchlist(w) for w in raw]
 
-    def create_watchlist(
-        self, name: str, symbols: list[str] | None = None
-    ) -> WatchlistInfo:
+    def create_watchlist(self, name: str, symbols: list[str] | None = None) -> WatchlistInfo:
         req = CreateWatchlistRequest(name=name, symbols=symbols or [])
         raw = self._client.create_watchlist(req)
         return _to_watchlist(raw)

@@ -28,10 +28,7 @@ print(f"  P/E: {pe}")
 print(f"  P/B: {pb}")
 pe_max = float(th_item.get("max_pe", 25))
 pe_pass = pe > 0 and pe < pe_max
-print(
-    f"  P/E pass (<{th_item.get('max_pe', '?')}): "
-    f"{pe_pass}"
-)
+print(f"  P/E pass (<{th_item.get('max_pe', '?')}): {pe_pass}")
 print(
     f"  P/B pass (<{th_item.get('max_pb', '?')}): {pb > 0 and pb < float(th_item.get('max_pb', 5))}"
 )

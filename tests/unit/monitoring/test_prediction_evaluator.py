@@ -7,8 +7,6 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from monitoring.prediction_evaluator.evaluator import (
     _evaluate_single,
     evaluate_matured_predictions,
@@ -23,7 +21,6 @@ from monitoring.prediction_evaluator.metrics import (
     _fetch_from_financials,
     fetch_actual,
 )
-
 
 # --- Evaluator tests ---
 
@@ -128,9 +125,7 @@ class TestEvaluateMaturedPredictions:
         decisions_client = MagicMock()
         decisions_client.query.return_value = [decision]
 
-        results = evaluate_matured_predictions(
-            decisions_client, MagicMock(), MagicMock()
-        )
+        results = evaluate_matured_predictions(decisions_client, MagicMock(), MagicMock())
         assert len(results) == 0
 
     def test_already_evaluated_skipped(self):
@@ -150,9 +145,7 @@ class TestEvaluateMaturedPredictions:
         decisions_client = MagicMock()
         decisions_client.query.return_value = [decision]
 
-        results = evaluate_matured_predictions(
-            decisions_client, MagicMock(), MagicMock()
-        )
+        results = evaluate_matured_predictions(decisions_client, MagicMock(), MagicMock())
         assert len(results) == 0
 
     def test_metric_unavailable_unresolvable(self):
@@ -199,9 +192,7 @@ class TestEvaluateMaturedPredictions:
         decisions_client = MagicMock()
         decisions_client.query.return_value = [decision]
 
-        results = evaluate_matured_predictions(
-            decisions_client, MagicMock(), MagicMock()
-        )
+        results = evaluate_matured_predictions(decisions_client, MagicMock(), MagicMock())
         assert len(results) == 0
 
     def test_gsi_fallback_on_validation_exception(self):
@@ -235,9 +226,7 @@ class TestEvaluateMaturedPredictions:
             "monitoring.prediction_evaluator.metrics._fetch_historical_price",
             return_value=150.0,
         ):
-            results = evaluate_matured_predictions(
-                decisions_client, companies_client, MagicMock()
-            )
+            results = evaluate_matured_predictions(decisions_client, companies_client, MagicMock())
         assert len(results) == 1
         decisions_client.scan_all.assert_called_once()
 
@@ -250,10 +239,34 @@ class TestAggregateFinancialsByYear:
 
     def test_aggregates_multiple_metrics_into_year_dict(self):
         items = [
-            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
-            {"ticker": "AAPL", "period": "2024-12-31#net_income", "metric_name": "net_income", "value": 100e9, "fiscal_year": 2024},
-            {"ticker": "AAPL", "period": "2024-12-31#stockholders_equity", "metric_name": "stockholders_equity", "value": 50e9, "fiscal_year": 2024},
-            {"ticker": "AAPL", "period": "2023-12-31#revenue", "metric_name": "revenue", "value": 380e9, "fiscal_year": 2023},
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#revenue",
+                "metric_name": "revenue",
+                "value": 400e9,
+                "fiscal_year": 2024,
+            },
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#net_income",
+                "metric_name": "net_income",
+                "value": 100e9,
+                "fiscal_year": 2024,
+            },
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#stockholders_equity",
+                "metric_name": "stockholders_equity",
+                "value": 50e9,
+                "fiscal_year": 2024,
+            },
+            {
+                "ticker": "AAPL",
+                "period": "2023-12-31#revenue",
+                "metric_name": "revenue",
+                "value": 380e9,
+                "fiscal_year": 2023,
+            },
         ]
         result = _aggregate_financials_by_year(items)
         assert 2024 in result
@@ -274,8 +287,20 @@ class TestFetchFromFinancialsAggregated:
         """Multiple items for same year are aggregated to compute net_margin."""
         financials_client = MagicMock()
         financials_client.query.return_value = [
-            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
-            {"ticker": "AAPL", "period": "2024-12-31#net_income", "metric_name": "net_income", "value": 100e9, "fiscal_year": 2024},
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#revenue",
+                "metric_name": "revenue",
+                "value": 400e9,
+                "fiscal_year": 2024,
+            },
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#net_income",
+                "metric_name": "net_income",
+                "value": 100e9,
+                "fiscal_year": 2024,
+            },
         ]
         result = _fetch_from_financials(financials_client, "AAPL", "net_margin")
         assert result is not None
@@ -284,7 +309,13 @@ class TestFetchFromFinancialsAggregated:
     def test_revenue_direct_lookup(self):
         financials_client = MagicMock()
         financials_client.query.return_value = [
-            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#revenue",
+                "metric_name": "revenue",
+                "value": 400e9,
+                "fiscal_year": 2024,
+            },
         ]
         result = _fetch_from_financials(financials_client, "AAPL", "revenue")
         assert result == 400e9
@@ -293,17 +324,43 @@ class TestFetchFromFinancialsAggregated:
         """With as_of_date in 2023, should use 2023 data not 2024."""
         financials_client = MagicMock()
         financials_client.query.return_value = [
-            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
-            {"ticker": "AAPL", "period": "2023-12-31#revenue", "metric_name": "revenue", "value": 380e9, "fiscal_year": 2023},
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#revenue",
+                "metric_name": "revenue",
+                "value": 400e9,
+                "fiscal_year": 2024,
+            },
+            {
+                "ticker": "AAPL",
+                "period": "2023-12-31#revenue",
+                "metric_name": "revenue",
+                "value": 380e9,
+                "fiscal_year": 2023,
+            },
         ]
-        result = _fetch_from_financials(financials_client, "AAPL", "revenue", as_of_date="2023-12-31")
+        result = _fetch_from_financials(
+            financials_client, "AAPL", "revenue", as_of_date="2023-12-31"
+        )
         assert result == 380e9
 
     def test_return_on_equity_from_aggregated(self):
         financials_client = MagicMock()
         financials_client.query.return_value = [
-            {"ticker": "AAPL", "period": "2024-12-31#net_income", "metric_name": "net_income", "value": 100e9, "fiscal_year": 2024},
-            {"ticker": "AAPL", "period": "2024-12-31#stockholders_equity", "metric_name": "stockholders_equity", "value": 50e9, "fiscal_year": 2024},
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#net_income",
+                "metric_name": "net_income",
+                "value": 100e9,
+                "fiscal_year": 2024,
+            },
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#stockholders_equity",
+                "metric_name": "stockholders_equity",
+                "value": 50e9,
+                "fiscal_year": 2024,
+            },
         ]
         result = _fetch_from_financials(financials_client, "AAPL", "return_on_equity")
         assert result is not None
@@ -327,8 +384,11 @@ class TestFetchActualHistoricalPrice:
             return_value=155.0,
         ) as mock_hist:
             result = fetch_actual(
-                "stock_price", "AAPL", "yahoo_finance",
-                companies_client, financials_client,
+                "stock_price",
+                "AAPL",
+                "yahoo_finance",
+                companies_client,
+                financials_client,
                 as_of_date="2026-06-15",
             )
         assert result == 155.0
@@ -345,8 +405,11 @@ class TestFetchActualHistoricalPrice:
             return_value=None,
         ):
             result = fetch_actual(
-                "stock_price", "AAPL", "yahoo_finance",
-                companies_client, financials_client,
+                "stock_price",
+                "AAPL",
+                "yahoo_finance",
+                companies_client,
+                financials_client,
                 as_of_date="2026-06-15",
             )
         assert result == 160.0
@@ -357,15 +420,24 @@ class TestFetchActualHistoricalPrice:
         companies_client.get_item.return_value = None
         financials_client = MagicMock()
         financials_client.query.return_value = [
-            {"ticker": "AAPL", "period": "2024-12-31#revenue", "metric_name": "revenue", "value": 400e9, "fiscal_year": 2024},
+            {
+                "ticker": "AAPL",
+                "period": "2024-12-31#revenue",
+                "metric_name": "revenue",
+                "value": 400e9,
+                "fiscal_year": 2024,
+            },
         ]
 
         with patch(
             "monitoring.prediction_evaluator.metrics._fetch_historical_price",
         ) as mock_hist:
             result = fetch_actual(
-                "revenue", "AAPL", "yahoo_finance",
-                companies_client, financials_client,
+                "revenue",
+                "AAPL",
+                "yahoo_finance",
+                companies_client,
+                financials_client,
                 as_of_date="2024-12-31",
             )
         mock_hist.assert_not_called()
@@ -443,7 +515,7 @@ class TestGenerateLessonsFromResults:
         stored = generate_lessons_from_results(results, lessons_client)
 
         # No prediction_miss lessons, but may have calibration if sample >= 10
-        prediction_miss = [l for l in stored if l["lesson_type"] == "prediction_miss"]
+        prediction_miss = [le for le in stored if le["lesson_type"] == "prediction_miss"]
         assert len(prediction_miss) == 0
 
     def test_unresolvable_generates_no_lesson(self):
@@ -466,38 +538,42 @@ class TestGenerateLessonsFromResults:
         results = []
         # 7 confirmed + 3 falsified = 10 total, 70% accuracy
         for i in range(7):
-            results.append({
-                "ticker": f"T{i}",
-                "sector": "Technology",
-                "prediction": {
-                    "metric": "revenue",
-                    "operator": ">",
-                    "threshold": 100,
-                    "analysis_stage": "intrinsic_value",
-                },
-                "status": "CONFIRMED",
-                "actual_value": 150,
-            })
+            results.append(
+                {
+                    "ticker": f"T{i}",
+                    "sector": "Technology",
+                    "prediction": {
+                        "metric": "revenue",
+                        "operator": ">",
+                        "threshold": 100,
+                        "analysis_stage": "intrinsic_value",
+                    },
+                    "status": "CONFIRMED",
+                    "actual_value": 150,
+                }
+            )
         for i in range(3):
-            results.append({
-                "ticker": f"F{i}",
-                "sector": "Technology",
-                "prediction": {
-                    "metric": "revenue",
-                    "operator": ">",
-                    "threshold": 100,
-                    "deadline": "2026-01-01",
-                    "description": "Revenue test",
-                    "analysis_stage": "intrinsic_value",
-                },
-                "status": "FALSIFIED",
-                "actual_value": 50,
-            })
+            results.append(
+                {
+                    "ticker": f"F{i}",
+                    "sector": "Technology",
+                    "prediction": {
+                        "metric": "revenue",
+                        "operator": ">",
+                        "threshold": 100,
+                        "deadline": "2026-01-01",
+                        "description": "Revenue test",
+                        "analysis_stage": "intrinsic_value",
+                    },
+                    "status": "FALSIFIED",
+                    "actual_value": 50,
+                }
+            )
 
         lessons_client = MagicMock()
         stored = generate_lessons_from_results(results, lessons_client)
 
-        cal_lessons = [l for l in stored if l["lesson_type"] == "confidence_calibration"]
+        cal_lessons = [le for le in stored if le["lesson_type"] == "confidence_calibration"]
         assert len(cal_lessons) == 1
         cal = cal_lessons[0]
         assert cal["confidence_calibration"]["analysis_stage"] == "intrinsic_value"
@@ -508,48 +584,52 @@ class TestGenerateLessonsFromResults:
         """When sample size < MIN_SAMPLE_SIZE, no calibration lesson is written."""
         results = []
         for i in range(MIN_SAMPLE_SIZE - 1):
-            results.append({
-                "ticker": f"T{i}",
-                "sector": "Technology",
-                "prediction": {
-                    "metric": "revenue",
-                    "operator": ">",
-                    "threshold": 100,
-                    "deadline": "2026-01-01",
-                    "description": "test",
-                    "analysis_stage": "intrinsic_value",
-                },
-                "status": "FALSIFIED",
-                "actual_value": 50,
-            })
+            results.append(
+                {
+                    "ticker": f"T{i}",
+                    "sector": "Technology",
+                    "prediction": {
+                        "metric": "revenue",
+                        "operator": ">",
+                        "threshold": 100,
+                        "deadline": "2026-01-01",
+                        "description": "test",
+                        "analysis_stage": "intrinsic_value",
+                    },
+                    "status": "FALSIFIED",
+                    "actual_value": 50,
+                }
+            )
 
         lessons_client = MagicMock()
         stored = generate_lessons_from_results(results, lessons_client)
 
-        cal_lessons = [l for l in stored if l["lesson_type"] == "confidence_calibration"]
+        cal_lessons = [le for le in stored if le["lesson_type"] == "confidence_calibration"]
         assert len(cal_lessons) == 0
 
     def test_calibration_factor_clamped(self):
         """Accuracy of 100% is clamped to CALIBRATION_FACTOR_MAX (1.3)."""
         results = []
         for i in range(12):
-            results.append({
-                "ticker": f"T{i}",
-                "sector": "Technology",
-                "prediction": {
-                    "metric": "revenue",
-                    "operator": ">",
-                    "threshold": 100,
-                    "analysis_stage": "intrinsic_value",
-                },
-                "status": "CONFIRMED",
-                "actual_value": 150,
-            })
+            results.append(
+                {
+                    "ticker": f"T{i}",
+                    "sector": "Technology",
+                    "prediction": {
+                        "metric": "revenue",
+                        "operator": ">",
+                        "threshold": 100,
+                        "analysis_stage": "intrinsic_value",
+                    },
+                    "status": "CONFIRMED",
+                    "actual_value": 150,
+                }
+            )
 
         lessons_client = MagicMock()
         stored = generate_lessons_from_results(results, lessons_client)
 
-        cal_lessons = [l for l in stored if l["lesson_type"] == "confidence_calibration"]
+        cal_lessons = [le for le in stored if le["lesson_type"] == "confidence_calibration"]
         assert len(cal_lessons) == 1
         assert cal_lessons[0]["confidence_calibration"]["adjustment_factor"] == 1.0
         # 100% accuracy -> factor = 1.0 (accuracy itself), clamped at max 1.3
@@ -558,25 +638,27 @@ class TestGenerateLessonsFromResults:
         """Accuracy of 0% is clamped to CALIBRATION_FACTOR_MIN (0.5)."""
         results = []
         for i in range(10):
-            results.append({
-                "ticker": f"F{i}",
-                "sector": "Technology",
-                "prediction": {
-                    "metric": "revenue",
-                    "operator": ">",
-                    "threshold": 100,
-                    "deadline": "2026-01-01",
-                    "description": "test",
-                    "analysis_stage": "intrinsic_value",
-                },
-                "status": "FALSIFIED",
-                "actual_value": 50,
-            })
+            results.append(
+                {
+                    "ticker": f"F{i}",
+                    "sector": "Technology",
+                    "prediction": {
+                        "metric": "revenue",
+                        "operator": ">",
+                        "threshold": 100,
+                        "deadline": "2026-01-01",
+                        "description": "test",
+                        "analysis_stage": "intrinsic_value",
+                    },
+                    "status": "FALSIFIED",
+                    "actual_value": 50,
+                }
+            )
 
         lessons_client = MagicMock()
         stored = generate_lessons_from_results(results, lessons_client)
 
-        cal_lessons = [l for l in stored if l["lesson_type"] == "confidence_calibration"]
+        cal_lessons = [le for le in stored if le["lesson_type"] == "confidence_calibration"]
         assert len(cal_lessons) == 1
         assert cal_lessons[0]["confidence_calibration"]["adjustment_factor"] == 0.5
 
@@ -605,10 +687,20 @@ class TestGenerateLessonsFromResults:
 
         lesson = stored[0]
         required_fields = {
-            "lesson_type", "lesson_id", "severity", "description",
-            "actionable_rule", "prompt_injection_text", "ticker", "sector",
-            "quarter", "created_at", "expires_at", "expiry_quarters",
-            "active", "active_flag",
+            "lesson_type",
+            "lesson_id",
+            "severity",
+            "description",
+            "actionable_rule",
+            "prompt_injection_text",
+            "ticker",
+            "sector",
+            "quarter",
+            "created_at",
+            "expires_at",
+            "expiry_quarters",
+            "active",
+            "active_flag",
         }
         assert required_fields.issubset(set(lesson.keys()))
         assert lesson["active_flag"] == "1"  # String, not boolean

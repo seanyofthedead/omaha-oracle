@@ -1,6 +1,7 @@
 """Portfolio health score — composite 0-100 gauge."""
 
 from __future__ import annotations
+
 from typing import Any
 
 
@@ -69,9 +70,7 @@ def compute_health_score(portfolio: dict[str, Any]) -> dict[str, Any]:
 
     # 3. Position Sizing Score (0-25)
     if positions and invested > 0:
-        position_pcts = [
-            pos.get("market_value", 0) / portfolio_value * 100 for pos in positions
-        ]
+        position_pcts = [pos.get("market_value", 0) / portfolio_value * 100 for pos in positions]
         max_pos_pct = max(position_pcts) if position_pcts else 0
         violations = sum(1 for p in position_pcts if p > 15)
 

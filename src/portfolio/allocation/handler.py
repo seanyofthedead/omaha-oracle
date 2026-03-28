@@ -212,11 +212,13 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             predictions_with_status = []
             for i, pred in enumerate(raw_predictions):
                 if isinstance(pred, dict):
-                    predictions_with_status.append({
-                        **pred,
-                        "id": f"{pred_prefix}_{i}",
-                        "status": "pending",
-                    })
+                    predictions_with_status.append(
+                        {
+                            **pred,
+                            "id": f"{pred_prefix}_{i}",
+                            "status": "pending",
+                        }
+                    )
             payload["predictions"] = predictions_with_status
 
         _log_decision(decisions_client, "BUY", ticker, buy_result["signal"], payload)

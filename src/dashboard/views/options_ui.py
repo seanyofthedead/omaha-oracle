@@ -48,11 +48,15 @@ def _render_chain_viewer(client: AlpacaClient) -> None:
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        underlying = st.text_input(
-            "Underlying Symbol",
-            placeholder="e.g. AAPL",
-            key="options_underlying",
-        ).upper().strip()
+        underlying = (
+            st.text_input(
+                "Underlying Symbol",
+                placeholder="e.g. AAPL",
+                key="options_underlying",
+            )
+            .upper()
+            .strip()
+        )
     with col2:
         fetch = st.button(
             "Load Chain",
@@ -135,9 +139,7 @@ def _render_chain_viewer(client: AlpacaClient) -> None:
         )
 
 
-def _fetch_chain(
-    client: AlpacaClient, underlying: str
-) -> list[OptionContractInfo] | None:
+def _fetch_chain(client: AlpacaClient, underlying: str) -> list[OptionContractInfo] | None:
     """Fetch options chain, returning None on error."""
     try:
         with st.spinner(f"Loading options chain for {underlying}..."):
@@ -157,11 +159,15 @@ def _render_single_leg_order(client: AlpacaClient) -> None:
     with st.form("option_single_leg_form"):
         col1, col2 = st.columns(2)
         with col1:
-            symbol = st.text_input(
-                "Option Symbol",
-                placeholder="e.g. AAPL250418C00200000",
-                key="opt_sl_symbol",
-            ).upper().strip()
+            symbol = (
+                st.text_input(
+                    "Option Symbol",
+                    placeholder="e.g. AAPL250418C00200000",
+                    key="opt_sl_symbol",
+                )
+                .upper()
+                .strip()
+            )
             qty = st.number_input(
                 "Contracts",
                 min_value=1,
@@ -240,8 +246,7 @@ def _render_single_leg_order(client: AlpacaClient) -> None:
                     limit_price=limit_price,
                 )
                 st.success(
-                    f"Order submitted — ID: {result.order_id[:8]}... "
-                    f"Status: {result.status}"
+                    f"Order submitted — ID: {result.order_id[:8]}... Status: {result.status}"
                 )
             except Exception as exc:
                 handle_alpaca_error(exc)
@@ -264,31 +269,47 @@ def _render_multi_leg_order(client: AlpacaClient) -> None:
         if strategy == "Vertical Spread":
             col1, col2 = st.columns(2)
             with col1:
-                long_sym = st.text_input(
-                    "Long Leg (buy)",
-                    placeholder="e.g. AAPL250418C00200000",
-                    key="opt_ml_long",
-                ).upper().strip()
+                long_sym = (
+                    st.text_input(
+                        "Long Leg (buy)",
+                        placeholder="e.g. AAPL250418C00200000",
+                        key="opt_ml_long",
+                    )
+                    .upper()
+                    .strip()
+                )
             with col2:
-                short_sym = st.text_input(
-                    "Short Leg (sell)",
-                    placeholder="e.g. AAPL250418C00210000",
-                    key="opt_ml_short",
-                ).upper().strip()
+                short_sym = (
+                    st.text_input(
+                        "Short Leg (sell)",
+                        placeholder="e.g. AAPL250418C00210000",
+                        key="opt_ml_short",
+                    )
+                    .upper()
+                    .strip()
+                )
         else:
             col1, col2 = st.columns(2)
             with col1:
-                call_sym = st.text_input(
-                    "Call Symbol",
-                    placeholder="e.g. AAPL250418C00200000",
-                    key="opt_ml_call",
-                ).upper().strip()
+                call_sym = (
+                    st.text_input(
+                        "Call Symbol",
+                        placeholder="e.g. AAPL250418C00200000",
+                        key="opt_ml_call",
+                    )
+                    .upper()
+                    .strip()
+                )
             with col2:
-                put_sym = st.text_input(
-                    "Put Symbol",
-                    placeholder="e.g. AAPL250418P00200000",
-                    key="opt_ml_put",
-                ).upper().strip()
+                put_sym = (
+                    st.text_input(
+                        "Put Symbol",
+                        placeholder="e.g. AAPL250418P00200000",
+                        key="opt_ml_put",
+                    )
+                    .upper()
+                    .strip()
+                )
 
         col_qty, col_type, col_price, col_tif = st.columns(4)
         with col_qty:
@@ -348,8 +369,7 @@ def _render_multi_leg_order(client: AlpacaClient) -> None:
         st.markdown(f"**{strategy} Order Summary**")
         for i, leg in enumerate(legs):
             st.caption(
-                f"Leg {i + 1}: {leg['side'].upper()} {leg['symbol']} "
-                f"(ratio: {leg['ratio_qty']})"
+                f"Leg {i + 1}: {leg['side'].upper()} {leg['symbol']} (ratio: {leg['ratio_qty']})"
             )
 
         col_a, col_b = st.columns(2)

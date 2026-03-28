@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import tempfile
 
 import numpy as np
@@ -12,8 +11,8 @@ from backtesting.engine import _compute_enhanced_metrics
 from backtesting.rl_env import TradingEnv
 from backtesting.rl_train import generate_gbm_prices, train
 
-
 # ── Enhanced metrics ─────────────────────────────────────────────────
+
 
 class TestEnhancedMetrics:
     """Test Sharpe, Sortino, Calmar ratios and avg trade return."""
@@ -68,6 +67,7 @@ class TestEnhancedMetrics:
 
 
 # ── RL Environment ───────────────────────────────────────────────────
+
 
 class TestTradingEnv:
     """Test Gymnasium compatibility and basic behavior."""
@@ -144,6 +144,7 @@ class TestTradingEnv:
 
 
 # ── RL Training ──────────────────────────────────────────────────────
+
 
 class TestRLTraining:
     """Test Q-learning training runs without error."""

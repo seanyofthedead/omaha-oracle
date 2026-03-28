@@ -4,7 +4,7 @@ Unit tests for thesis generator handler.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from shared.llm_client import BudgetExhaustedError
 
@@ -198,9 +198,25 @@ class TestThesisGeneratorHandler:
         bad_predictions = {
             "content": {
                 "predictions": [
-                    {"metric": "invalid_metric", "operator": ">", "threshold": 100, "deadline": "2027-01-01"},
-                    {"metric": "revenue", "operator": ">", "threshold": 400e9, "deadline": "2027-01-01", "description": "Good"},
-                    {"metric": "gross_margin", "operator": "INVALID", "threshold": 0.45, "deadline": "2027-01-01"},
+                    {
+                        "metric": "invalid_metric",
+                        "operator": ">",
+                        "threshold": 100,
+                        "deadline": "2027-01-01",
+                    },
+                    {
+                        "metric": "revenue",
+                        "operator": ">",
+                        "threshold": 400e9,
+                        "deadline": "2027-01-01",
+                        "description": "Good",
+                    },
+                    {
+                        "metric": "gross_margin",
+                        "operator": "INVALID",
+                        "threshold": 0.45,
+                        "deadline": "2027-01-01",
+                    },
                 ]
             },
             "model": "haiku",

@@ -85,9 +85,7 @@ def render() -> None:
         )
 
         if variant_a.strip() != variant_b.strip():
-            st.info(
-                f"Variants differ — {abs(len(lines_a) - len(lines_b))} line difference"
-            )
+            st.info(f"Variants differ — {abs(len(lines_a) - len(lines_b))} line difference")
 
     with tab_test:
         st.subheader("Live Test")
@@ -96,16 +94,10 @@ def render() -> None:
         with st.form("test_form"):
             test_col1, test_col2 = st.columns(2)
             with test_col1:
-                test_ticker = st.text_input(
-                    "Ticker to test", placeholder="e.g., AAPL"
-                )
+                test_ticker = st.text_input("Ticker to test", placeholder="e.g., AAPL")
             with test_col2:
-                test_tier = st.selectbox(
-                    "Model tier", ["analysis", "bulk"], index=0
-                )
-            run_test = st.form_submit_button(
-                "Run A/B Test", use_container_width=True
-            )
+                test_tier = st.selectbox("Model tier", ["analysis", "bulk"], index=0)
+            run_test = st.form_submit_button("Run A/B Test", use_container_width=True)
 
         if run_test and test_ticker:
             st.warning(
@@ -127,8 +119,7 @@ def render() -> None:
                             result_a = client.invoke(
                                 system_prompt=variant_a,
                                 user_prompt=(
-                                    f"Analyze {test_ticker.upper()}"
-                                    " for investment potential."
+                                    f"Analyze {test_ticker.upper()} for investment potential."
                                 ),
                                 tier=test_tier,
                             )
@@ -143,8 +134,7 @@ def render() -> None:
                             result_b = client.invoke(
                                 system_prompt=variant_b,
                                 user_prompt=(
-                                    f"Analyze {test_ticker.upper()}"
-                                    " for investment potential."
+                                    f"Analyze {test_ticker.upper()} for investment potential."
                                 ),
                                 tier=test_tier,
                             )
@@ -168,9 +158,7 @@ def render() -> None:
             with st.expander(f"{name} ({fname})"):
                 content = _load_prompt(fname)
                 st.code(content, language="markdown")
-                st.caption(
-                    f"{len(content)} characters, {len(content.split(chr(10)))} lines"
-                )
+                st.caption(f"{len(content)} characters, {len(content.split(chr(10)))} lines")
 
         # Also show the anti-style-drift guardrail
         with st.expander("Anti-Style-Drift Guardrail (prepended to all prompts)"):

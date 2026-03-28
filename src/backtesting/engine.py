@@ -33,9 +33,7 @@ def run_backtest(
 
     # Filter to BUY and SELL only
     trade_decisions = [
-        d
-        for d in sorted_decisions
-        if d.get("signal", "").upper() in ("BUY", "SELL")
+        d for d in sorted_decisions if d.get("signal", "").upper() in ("BUY", "SELL")
     ]
 
     if not trade_decisions:
@@ -65,11 +63,7 @@ def run_backtest(
         close_prices = prices[["Close"]].copy()
         close_prices.columns = [tickers_with_spy[0]]
     else:
-        close_prices = (
-            prices["Close"]
-            if "Close" in prices.columns.get_level_values(0)
-            else prices
-        )
+        close_prices = prices["Close"] if "Close" in prices.columns.get_level_values(0) else prices
 
     dates = [d.strftime("%Y-%m-%d") for d in close_prices.index]
 
@@ -158,9 +152,7 @@ def run_backtest(
     # Calculate metrics
     if portfolio_values and len(portfolio_values) > 1:
         total_return = (portfolio_values[-1] / portfolio_values[0] - 1) * 100
-        spy_return = (
-            (spy_values[-1] / spy_values[0] - 1) * 100 if spy_values else 0
-        )
+        spy_return = (spy_values[-1] / spy_values[0] - 1) * 100 if spy_values else 0
 
         # Max drawdown
         peak = portfolio_values[0]
@@ -184,8 +176,8 @@ def run_backtest(
         win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
 
         # --- Enhanced metrics ---
-        sharpe_ratio, sortino_ratio, calmar_ratio, avg_trade_return_pct = (
-            _compute_enhanced_metrics(portfolio_values, trades, max_dd)
+        sharpe_ratio, sortino_ratio, calmar_ratio, avg_trade_return_pct = _compute_enhanced_metrics(
+            portfolio_values, trades, max_dd
         )
     else:
         total_return = 0
@@ -235,7 +227,7 @@ def _compute_enhanced_metrics(
     -------
     (sharpe_ratio, sortino_ratio, calmar_ratio, avg_trade_return_pct)
     """
-    TRADING_DAYS = 252
+    trading_days = 252
 
     # Daily returns
     daily_returns: list[float] = []
@@ -252,18 +244,14 @@ def _compute_enhanced_metrics(
     # Sharpe ratio (risk-free rate = 0)
     variance = sum((r - mean_ret) ** 2 for r in daily_returns) / len(daily_returns)
     std_ret = math.sqrt(variance)
-    sharpe_ratio = (
-        (mean_ret / std_ret) * math.sqrt(TRADING_DAYS) if std_ret > 0 else 0.0
-    )
+    sharpe_ratio = (mean_ret / std_ret) * math.sqrt(trading_days) if std_ret > 0 else 0.0
 
     # Sortino ratio (downside deviation only)
     downside_sq = [r**2 for r in daily_returns if r < 0]
     if downside_sq:
         downside_dev = math.sqrt(sum(downside_sq) / len(daily_returns))
         sortino_ratio = (
-            (mean_ret / downside_dev) * math.sqrt(TRADING_DAYS)
-            if downside_dev > 0
-            else 0.0
+            (mean_ret / downside_dev) * math.sqrt(trading_days) if downside_dev > 0 else 0.0
         )
     else:
         sortino_ratio = 0.0
@@ -271,12 +259,8 @@ def _compute_enhanced_metrics(
     # Calmar ratio: annualized return / max drawdown
     n_days = len(daily_returns)
     total_return_frac = portfolio_values[-1] / portfolio_values[0] - 1
-    annualized_return = (
-        (1 + total_return_frac) ** (TRADING_DAYS / n_days) - 1 if n_days > 0 else 0
-    )
-    calmar_ratio = (
-        (annualized_return * 100 / max_dd) if max_dd > 0 else 0.0
-    )
+    annualized_return = (1 + total_return_frac) ** (trading_days / n_days) - 1 if n_days > 0 else 0
+    calmar_ratio = (annualized_return * 100 / max_dd) if max_dd > 0 else 0.0
 
     # Average trade return (completed round-trips)
     buy_prices: dict[str, float] = {}
@@ -290,9 +274,7 @@ def _compute_enhanced_metrics(
             if entry > 0:
                 trade_returns.append((t["price"] - entry) / entry * 100)
 
-    avg_trade_return_pct = (
-        sum(trade_returns) / len(trade_returns) if trade_returns else 0.0
-    )
+    avg_trade_return_pct = sum(trade_returns) / len(trade_returns) if trade_returns else 0.0
 
     return sharpe_ratio, sortino_ratio, calmar_ratio, avg_trade_return_pct
 

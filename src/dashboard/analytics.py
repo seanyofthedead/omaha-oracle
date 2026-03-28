@@ -107,9 +107,7 @@ def compute_sharpe_ratio(returns: list[float]) -> float:
     return mean / std
 
 
-def compute_all_metrics(
-    pnl_list: list[float], equity_curve: list[float]
-) -> dict[str, float]:
+def compute_all_metrics(pnl_list: list[float], equity_curve: list[float]) -> dict[str, float]:
     """Compute all risk metrics in one call.  Convenience for the UI."""
     return {
         "win_rate": compute_win_rate(pnl_list),
@@ -134,8 +132,7 @@ def build_journal_entries(filled_orders: list[OrderInfo]) -> list[dict]:
     """
     # Filter to usable fills
     usable = [
-        o for o in filled_orders
-        if o.filled_avg_price is not None and o.filled_at is not None
+        o for o in filled_orders if o.filled_avg_price is not None and o.filled_at is not None
     ]
 
     # Sort by fill time
@@ -160,17 +157,19 @@ def build_journal_entries(filled_orders: list[OrderInfo]) -> list[dict]:
             else:
                 pnl = (opener.filled_avg_price - order.filled_avg_price) * qty
 
-            entries.append({
-                "symbol": sym,
-                "side": opener.side,
-                "qty": qty,
-                "entry_price": opener.filled_avg_price,
-                "exit_price": order.filled_avg_price,
-                "entry_date": opener.filled_at,
-                "exit_date": order.filled_at,
-                "pnl": pnl,
-                "notes": "",
-            })
+            entries.append(
+                {
+                    "symbol": sym,
+                    "side": opener.side,
+                    "qty": qty,
+                    "entry_price": opener.filled_avg_price,
+                    "exit_price": order.filled_avg_price,
+                    "entry_date": opener.filled_at,
+                    "exit_date": order.filled_at,
+                    "pnl": pnl,
+                    "notes": "",
+                }
+            )
         else:
             open_legs[sym].append(order)
 
@@ -189,8 +188,10 @@ def prepare_equity_chart_data(history: PortfolioHistory) -> pd.DataFrame:
         return pd.DataFrame(columns=["date", "equity", "pct_change"])
 
     dates = [datetime.fromtimestamp(ts, tz=UTC) for ts in history.timestamps]
-    return pd.DataFrame({
-        "date": dates,
-        "equity": history.equity,
-        "pct_change": history.profit_loss_pct,
-    })
+    return pd.DataFrame(
+        {
+            "date": dates,
+            "equity": history.equity,
+            "pct_change": history.profit_loss_pct,
+        }
+    )

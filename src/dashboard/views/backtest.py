@@ -12,24 +12,18 @@ from dashboard.data import load_decisions
 
 def render() -> None:
     st.header("Backtesting")
-    st.caption(
-        "Replay past decisions against actual market prices to evaluate system performance."
-    )
+    st.caption("Replay past decisions against actual market prices to evaluate system performance.")
 
     # Load all decisions
     with st.spinner("Loading decision history..."):
         decisions = load_decisions(limit=500)
 
     if not decisions:
-        st.info(
-            "No decisions found. Run the analysis pipeline to generate buy/sell signals first."
-        )
+        st.info("No decisions found. Run the analysis pipeline to generate buy/sell signals first.")
         return
 
     # Date range selector in sidebar
-    timestamps = [
-        d.get("timestamp", "")[:10] for d in decisions if d.get("timestamp")
-    ]
+    timestamps = [d.get("timestamp", "")[:10] for d in decisions if d.get("timestamp")]
     if not timestamps:
         st.info("No timestamped decisions found.")
         return
@@ -62,8 +56,7 @@ def render() -> None:
     filtered = [
         d
         for d in decisions
-        if d.get("timestamp", "")[:10] >= str(start)
-        and d.get("timestamp", "")[:10] <= str(end)
+        if d.get("timestamp", "")[:10] >= str(start) and d.get("timestamp", "")[:10] <= str(end)
     ]
 
     if not filtered:
@@ -134,21 +127,15 @@ def render() -> None:
             buy_dates = [t["date"] for t in buy_trades]
             buy_vals = []
             for bd in buy_dates:
-                idx = (
-                    result["dates"].index(bd) if bd in result["dates"] else -1
-                )
-                buy_vals.append(
-                    result["portfolio_values"][idx] if idx >= 0 else None
-                )
+                idx = result["dates"].index(bd) if bd in result["dates"] else -1
+                buy_vals.append(result["portfolio_values"][idx] if idx >= 0 else None)
             fig.add_trace(
                 go.Scatter(
                     x=buy_dates,
                     y=buy_vals,
                     mode="markers",
                     name="BUY",
-                    marker=dict(
-                        color="#4CAF50", size=10, symbol="triangle-up"
-                    ),
+                    marker=dict(color="#4CAF50", size=10, symbol="triangle-up"),
                 )
             )
 
@@ -156,21 +143,15 @@ def render() -> None:
             sell_dates = [t["date"] for t in sell_trades]
             sell_vals = []
             for sd in sell_dates:
-                idx = (
-                    result["dates"].index(sd) if sd in result["dates"] else -1
-                )
-                sell_vals.append(
-                    result["portfolio_values"][idx] if idx >= 0 else None
-                )
+                idx = result["dates"].index(sd) if sd in result["dates"] else -1
+                sell_vals.append(result["portfolio_values"][idx] if idx >= 0 else None)
             fig.add_trace(
                 go.Scatter(
                     x=sell_dates,
                     y=sell_vals,
                     mode="markers",
                     name="SELL",
-                    marker=dict(
-                        color="#F44336", size=10, symbol="triangle-down"
-                    ),
+                    marker=dict(color="#F44336", size=10, symbol="triangle-down"),
                 )
             )
 

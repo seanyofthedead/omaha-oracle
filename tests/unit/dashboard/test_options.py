@@ -202,9 +202,7 @@ class TestGetOptionContracts:
 
     def test_invalid_symbol(self):
         tc = _mock_trading_client()
-        tc.get_option_contracts.side_effect = _make_api_error(
-            404, 40410000, "asset not found"
-        )
+        tc.get_option_contracts.side_effect = _make_api_error(404, 40410000, "asset not found")
         client = _make_client(tc)
 
         with pytest.raises(Exception):
@@ -212,9 +210,7 @@ class TestGetOptionContracts:
 
     def test_rate_limit(self):
         tc = _mock_trading_client()
-        tc.get_option_contracts.side_effect = _make_api_error(
-            429, 42900000, "rate limit"
-        )
+        tc.get_option_contracts.side_effect = _make_api_error(429, 42900000, "rate limit")
         client = _make_client(tc)
 
         with pytest.raises(Exception):
@@ -239,9 +235,7 @@ class TestGetOptionContract:
 
     def test_not_found(self):
         tc = _mock_trading_client()
-        tc.get_option_contract.side_effect = _make_api_error(
-            404, 40410000, "could not find asset"
-        )
+        tc.get_option_contract.side_effect = _make_api_error(404, 40410000, "could not find asset")
         client = _make_client(tc)
 
         with pytest.raises(Exception):
@@ -312,9 +306,7 @@ class TestSubmitOptionOrder:
 
     def test_insufficient_buying_power(self):
         tc = _mock_trading_client()
-        tc.submit_order.side_effect = _make_api_error(
-            403, 40310000, "insufficient buying power"
-        )
+        tc.submit_order.side_effect = _make_api_error(403, 40310000, "insufficient buying power")
         client = _make_client(tc)
 
         with pytest.raises(Exception):
@@ -380,22 +372,17 @@ class TestSubmitMultiLegOrder:
         client = _make_client()
 
         legs = [
-            {"symbol": f"AAPL250418C0020{i}000", "ratio_qty": 1, "side": "buy"}
-            for i in range(5)
+            {"symbol": f"AAPL250418C0020{i}000", "ratio_qty": 1, "side": "buy"} for i in range(5)
         ]
         with pytest.raises(ValueError, match="2 to 4 legs"):
-            client.submit_multi_leg_order(
-                legs=legs, qty=1, order_type="limit", time_in_force="day"
-            )
+            client.submit_multi_leg_order(legs=legs, qty=1, order_type="limit", time_in_force="day")
 
     def test_too_few_legs(self):
         client = _make_client()
 
         legs = [{"symbol": "AAPL250418C00200000", "ratio_qty": 1, "side": "buy"}]
         with pytest.raises(ValueError, match="2 to 4 legs"):
-            client.submit_multi_leg_order(
-                legs=legs, qty=1, order_type="limit", time_in_force="day"
-            )
+            client.submit_multi_leg_order(legs=legs, qty=1, order_type="limit", time_in_force="day")
 
     def test_market_closed(self):
         tc = _mock_trading_client()
@@ -409,9 +396,7 @@ class TestSubmitMultiLegOrder:
             {"symbol": "AAPL250418C00210000", "ratio_qty": 1, "side": "sell"},
         ]
         with pytest.raises(Exception):
-            client.submit_multi_leg_order(
-                legs=legs, qty=1, order_type="limit", time_in_force="day"
-            )
+            client.submit_multi_leg_order(legs=legs, qty=1, order_type="limit", time_in_force="day")
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -505,9 +490,7 @@ class TestFilterContracts:
     def test_filter_by_strike_range(self):
         from dashboard.options_chain import filter_contracts
 
-        result = filter_contracts(
-            _sample_contracts(), strike_min=195.0, strike_max=205.0
-        )
+        result = filter_contracts(_sample_contracts(), strike_min=195.0, strike_max=205.0)
         assert all(195.0 <= c.strike_price <= 205.0 for c in result)
         assert len(result) == 3
 
@@ -656,9 +639,7 @@ class TestValidateOptionOrder:
     def test_missing_symbol(self):
         from dashboard.options_orders import validate_option_order
 
-        errors = validate_option_order(
-            symbol="", qty=1, side="buy", order_type="market"
-        )
+        errors = validate_option_order(symbol="", qty=1, side="buy", order_type="market")
         assert any("symbol" in e.lower() for e in errors)
 
     def test_zero_qty(self):

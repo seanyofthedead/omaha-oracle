@@ -12,8 +12,7 @@ import streamlit as st
 
 from dashboard.alpaca_client import AlpacaClient
 from dashboard.alpaca_errors import handle_alpaca_error
-from dashboard.alpaca_models import PositionInfo
-from dashboard.fmt import fmt_currency, fmt_currency_short, fmt_pct
+from dashboard.fmt import fmt_currency_short
 
 # ── Account Overview ──────────────────────────────────────────────────────
 
@@ -69,10 +68,7 @@ def render_positions_table(client: AlpacaClient) -> None:
     st.subheader("Positions")
 
     if not positions:
-        st.info(
-            "No open positions. Use the order entry to open your first "
-            "paper trade."
-        )
+        st.info("No open positions. Use the order entry to open your first paper trade.")
         return
 
     # Build DataFrame
@@ -124,9 +120,7 @@ def render_positions_table(client: AlpacaClient) -> None:
 # ── Close Position Handler ────────────────────────────────────────────────
 
 
-def _handle_close_position(
-    client: AlpacaClient, symbol: str, _st=None
-) -> None:
+def _handle_close_position(client: AlpacaClient, symbol: str, _st=None) -> None:
     """Close a position and show success/error feedback.
 
     The *_st* parameter allows tests to inject a mock Streamlit module.

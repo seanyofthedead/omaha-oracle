@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 import numpy as np
@@ -82,9 +81,7 @@ def train(
                 q_table[next_state] = np.zeros(env.action_space.n)
 
             best_next = float(np.max(q_table[next_state]))
-            q_table[state][action] += ALPHA * (
-                reward + GAMMA * best_next - q_table[state][action]
-            )
+            q_table[state][action] += ALPHA * (reward + GAMMA * best_next - q_table[state][action])
 
             state = next_state
             total_reward += reward
@@ -108,7 +105,7 @@ def train(
         if verbose and ep % 25 == 0:
             print(
                 f"Ep {ep:3d} | reward={total_reward:+.4f} | "
-                f"PV=${pv:,.0f} | trades={info.get('n_trades',0)} | "
+                f"PV=${pv:,.0f} | trades={info.get('n_trades', 0)} | "
                 f"eps={epsilon:.3f}"
             )
 
@@ -132,6 +129,8 @@ def train(
 if __name__ == "__main__":
     result = train()
     final = result["training_log"][-1]
-    print(f"\nFinal: PV=${final['portfolio_value']:,.0f}, "
-          f"reward={final['total_reward']:+.4f}, "
-          f"Q-states={result['q_table_size']}")
+    print(
+        f"\nFinal: PV=${final['portfolio_value']:,.0f}, "
+        f"reward={final['total_reward']:+.4f}, "
+        f"Q-states={result['q_table_size']}"
+    )

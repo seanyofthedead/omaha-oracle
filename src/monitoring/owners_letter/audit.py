@@ -207,10 +207,18 @@ def run_outcome_audit(
         prediction_summary = None
         preds = payload.get("predictions")
         if preds and isinstance(preds, list):
-            pred_confirmed = sum(1 for p in preds if isinstance(p, dict) and p.get("status") == "CONFIRMED")
-            pred_falsified = sum(1 for p in preds if isinstance(p, dict) and p.get("status") == "FALSIFIED")
-            pred_pending = sum(1 for p in preds if isinstance(p, dict) and p.get("status") == "pending")
-            pred_unresolvable = sum(1 for p in preds if isinstance(p, dict) and p.get("status") == "UNRESOLVABLE")
+            pred_confirmed = sum(
+                1 for p in preds if isinstance(p, dict) and p.get("status") == "CONFIRMED"
+            )
+            pred_falsified = sum(
+                1 for p in preds if isinstance(p, dict) and p.get("status") == "FALSIFIED"
+            )
+            pred_pending = sum(
+                1 for p in preds if isinstance(p, dict) and p.get("status") == "pending"
+            )
+            pred_unresolvable = sum(
+                1 for p in preds if isinstance(p, dict) and p.get("status") == "UNRESOLVABLE"
+            )
             prediction_summary = {
                 "total": len(preds),
                 "confirmed": pred_confirmed,

@@ -49,9 +49,7 @@ class FakeUploadedFile:
 @pytest.mark.e2e
 @requires_anthropic
 class TestUploadHTML10K:
-    def test_full_pipeline_with_markel_10k(
-        self, e2e_tables, markel_10k_html, markel_metadata
-    ):
+    def test_full_pipeline_with_markel_10k(self, e2e_tables, markel_10k_html, markel_metadata):
         """Upload real Markel 10-K HTML, run full pipeline, verify results."""
         file_bytes, filename = markel_10k_html
 

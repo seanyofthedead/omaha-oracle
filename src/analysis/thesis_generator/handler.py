@@ -8,7 +8,7 @@ Output: markdown stored to S3 at theses/{ticker}/{date}.md
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -78,18 +78,20 @@ MOS_MIN = 0.30
 
 # --- Prediction extraction constants ---
 
-ALLOWED_METRICS = frozenset({
-    "revenue",
-    "earnings_per_share",
-    "gross_margin",
-    "operating_margin",
-    "net_margin",
-    "book_value_per_share",
-    "debt_to_equity",
-    "free_cash_flow",
-    "return_on_equity",
-    "stock_price",
-})
+ALLOWED_METRICS = frozenset(
+    {
+        "revenue",
+        "earnings_per_share",
+        "gross_margin",
+        "operating_margin",
+        "net_margin",
+        "book_value_per_share",
+        "debt_to_equity",
+        "free_cash_flow",
+        "return_on_equity",
+        "stock_price",
+    }
+)
 
 METRIC_TO_STAGE: dict[str, str] = {
     "revenue": "intrinsic_value",
@@ -106,7 +108,9 @@ METRIC_TO_STAGE: dict[str, str] = {
 
 ALLOWED_OPERATORS = frozenset({">", "<", ">=", "<=", "=="})
 
-_PREDICTION_PROMPT_PATH = Path(__file__).resolve().parent.parent.parent.parent / "prompts" / "prediction_extraction.md"
+_PREDICTION_PROMPT_PATH = (
+    Path(__file__).resolve().parent.parent.parent.parent / "prompts" / "prediction_extraction.md"
+)
 
 
 def _passes_all_stages(event: dict[str, Any]) -> tuple[bool, str]:
@@ -230,15 +234,17 @@ def _extract_predictions(
             )
             continue
         metric = pred["metric"]
-        validated.append({
-            "description": str(pred.get("description", "")),
-            "metric": metric,
-            "operator": pred["operator"],
-            "threshold": float(pred["threshold"]),
-            "data_source": pred.get("data_source", "yahoo_finance"),
-            "deadline": pred["deadline"],
-            "analysis_stage": METRIC_TO_STAGE.get(metric, "intrinsic_value"),
-        })
+        validated.append(
+            {
+                "description": str(pred.get("description", "")),
+                "metric": metric,
+                "operator": pred["operator"],
+                "threshold": float(pred["threshold"]),
+                "data_source": pred.get("data_source", "yahoo_finance"),
+                "deadline": pred["deadline"],
+                "analysis_stage": METRIC_TO_STAGE.get(metric, "intrinsic_value"),
+            }
+        )
         if len(validated) >= 3:
             break
 

@@ -63,10 +63,7 @@ def markel_10k_html() -> tuple[bytes, str]:
         if form == "10-K":
             acc = recent["accessionNumber"][i].replace("-", "")
             doc = recent["primaryDocument"][i]
-            url = (
-                f"https://www.sec.gov/Archives/edgar/data/"
-                f"{MARKEL_CIK}/{acc}/{doc}"
-            )
+            url = f"https://www.sec.gov/Archives/edgar/data/{MARKEL_CIK}/{acc}/{doc}"
             break
     else:
         pytest.skip("No Markel 10-K found in EDGAR submissions")

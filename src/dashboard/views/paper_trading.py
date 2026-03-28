@@ -130,9 +130,7 @@ def _render_watchlists(client: AlpacaClient) -> None:
                         st.error("Name is required.")
                     else:
                         try:
-                            rename_watchlist(
-                                client, wl_to_rename.watchlist_id, rename_val.strip()
-                            )
+                            rename_watchlist(client, wl_to_rename.watchlist_id, rename_val.strip())
                             st.success(f"Renamed to '{rename_val.strip()}'")
                             st.rerun()
                         except ValueError as ve:
@@ -181,9 +179,7 @@ def _render_watchlists(client: AlpacaClient) -> None:
 
     with add_col:
         with st.popover("Add Symbol", use_container_width=True):
-            sym_input = st.text_input(
-                "Symbol", key="wl_add_sym", placeholder="e.g. AAPL"
-            )
+            sym_input = st.text_input("Symbol", key="wl_add_sym", placeholder="e.g. AAPL")
             if st.button("Add", key="wl_add_btn", use_container_width=True):
                 if not sym_input or not sym_input.strip():
                     st.error("Enter a symbol.")
@@ -202,9 +198,7 @@ def _render_watchlists(client: AlpacaClient) -> None:
             if not selected.symbols:
                 st.info("No symbols to remove.")
             else:
-                sym_to_remove = st.selectbox(
-                    "Symbol", selected.symbols, key="wl_remove_sym_select"
-                )
+                sym_to_remove = st.selectbox("Symbol", selected.symbols, key="wl_remove_sym_select")
                 if st.button("Remove", key="wl_remove_btn", use_container_width=True):
                     try:
                         remove_symbol(client, selected.watchlist_id, sym_to_remove)

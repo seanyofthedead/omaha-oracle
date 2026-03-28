@@ -6,9 +6,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
 _BUY_ANALYSIS = {
     "ticker": "AAPL",
     "moat_score": 8,
@@ -55,7 +52,9 @@ class TestAllocationPredictionThreading:
         with (
             patch("portfolio.allocation.handler._check_trading_enabled"),
             patch("portfolio.allocation.handler.DynamoClient") as mock_dc_cls,
-            patch("portfolio.allocation.handler.load_portfolio_state", return_value=_PORTFOLIO_STATE),
+            patch(
+                "portfolio.allocation.handler.load_portfolio_state", return_value=_PORTFOLIO_STATE
+            ),
             patch("portfolio.allocation.handler.load_latest_analysis", return_value=_BUY_ANALYSIS),
             patch(
                 "portfolio.allocation.handler.evaluate_buy",
@@ -107,7 +106,9 @@ class TestAllocationPredictionThreading:
         with (
             patch("portfolio.allocation.handler._check_trading_enabled"),
             patch("portfolio.allocation.handler.DynamoClient") as mock_dc_cls,
-            patch("portfolio.allocation.handler.load_portfolio_state", return_value=_PORTFOLIO_STATE),
+            patch(
+                "portfolio.allocation.handler.load_portfolio_state", return_value=_PORTFOLIO_STATE
+            ),
             patch("portfolio.allocation.handler.load_latest_analysis", return_value=_BUY_ANALYSIS),
             patch(
                 "portfolio.allocation.handler.evaluate_buy",
@@ -124,7 +125,7 @@ class TestAllocationPredictionThreading:
 
             from portfolio.allocation.handler import handler
 
-            result = handler({"tickers": ["AAPL"]}, None)
+            handler({"tickers": ["AAPL"]}, None)
 
         buy_logs = [i for i in logged_items if i.get("decision_type") == "BUY"]
         assert len(buy_logs) == 1
@@ -141,8 +142,12 @@ class TestAllocationPredictionThreading:
         with (
             patch("portfolio.allocation.handler._check_trading_enabled"),
             patch("portfolio.allocation.handler.DynamoClient") as mock_dc_cls,
-            patch("portfolio.allocation.handler.load_portfolio_state", return_value=_PORTFOLIO_STATE),
-            patch("portfolio.allocation.handler.load_latest_analysis", return_value=analysis_no_preds),
+            patch(
+                "portfolio.allocation.handler.load_portfolio_state", return_value=_PORTFOLIO_STATE
+            ),
+            patch(
+                "portfolio.allocation.handler.load_latest_analysis", return_value=analysis_no_preds
+            ),
             patch(
                 "portfolio.allocation.handler.evaluate_buy",
                 return_value={
@@ -166,7 +171,7 @@ class TestAllocationPredictionThreading:
 
             from portfolio.allocation.handler import handler
 
-            result = handler({"tickers": ["AAPL"]}, None)
+            handler({"tickers": ["AAPL"]}, None)
 
         buy_logs = [i for i in logged_items if i.get("decision_type") == "BUY"]
         payload = buy_logs[0]["payload"]

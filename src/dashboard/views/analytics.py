@@ -36,9 +36,7 @@ def _fetch_portfolio_history(
     foundation adds the method, this should be replaced.
     """
     try:
-        raw = client._client.get_portfolio_history(
-            period=period, timeframe=timeframe
-        )
+        raw = client._client.get_portfolio_history(period=period, timeframe=timeframe)
         return PortfolioHistory(
             timestamps=list(raw.timestamp or []),
             equity=[float(e) for e in (raw.equity or [])],
@@ -57,19 +55,32 @@ def _render_performance_chart(client: AlpacaClient) -> list[float]:
     """Render the equity-over-time chart.  Returns the equity curve list."""
     st.subheader("Portfolio Performance")
 
-    period_map = {"1 Day": "1D", "1 Week": "1W", "1 Month": "1M", "3 Months": "3M",
-                  "1 Year": "1A", "All Time": "all"}
-    tf_map = {"1 Day": "5Min", "1 Week": "15Min", "1 Month": "1D",
-              "3 Months": "1D", "1 Year": "1D", "All Time": "1D"}
+    period_map = {
+        "1 Day": "1D",
+        "1 Week": "1W",
+        "1 Month": "1M",
+        "3 Months": "3M",
+        "1 Year": "1A",
+        "All Time": "all",
+    }
+    tf_map = {
+        "1 Day": "5Min",
+        "1 Week": "15Min",
+        "1 Month": "1D",
+        "3 Months": "1D",
+        "1 Year": "1D",
+        "All Time": "1D",
+    }
 
     selected = st.radio(
-        "Period", list(period_map.keys()), horizontal=True, key="analytics_period",
+        "Period",
+        list(period_map.keys()),
+        horizontal=True,
+        key="analytics_period",
         label_visibility="collapsed",
     )
 
-    history = _fetch_portfolio_history(
-        client, period_map[selected], tf_map[selected]
-    )
+    history = _fetch_portfolio_history(client, period_map[selected], tf_map[selected])
     if history is None or not history.timestamps:
         st.info("No portfolio history available for this period.")
         return []
@@ -77,15 +88,17 @@ def _render_performance_chart(client: AlpacaClient) -> list[float]:
     df = prepare_equity_chart_data(history)
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df["date"], y=df["equity"],
-        mode="lines",
-        line={"color": ACCENT_BLUE, "width": 2},
-        fill="tozeroy",
-        fillcolor="rgba(108,158,255,0.10)",
-        hovertemplate="<b>%{x|%b %d, %Y %I:%M %p}</b><br>"
-                      "Equity: $%{y:,.2f}<extra></extra>",
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=df["date"],
+            y=df["equity"],
+            mode="lines",
+            line={"color": ACCENT_BLUE, "width": 2},
+            fill="tozeroy",
+            fillcolor="rgba(108,158,255,0.10)",
+            hovertemplate="<b>%{x|%b %d, %Y %I:%M %p}</b><br>Equity: $%{y:,.2f}<extra></extra>",
+        )
+    )
     fig.update_layout(
         yaxis_title="Equity ($)",
         xaxis_title="",
@@ -150,8 +163,17 @@ def _render_trade_journal(client: AlpacaClient) -> list[float]:
     import pandas as pd
 
     df = pd.DataFrame(entries)
-    display_cols = ["symbol", "side", "qty", "entry_price", "exit_price",
-                    "entry_date", "exit_date", "pnl", "notes"]
+    display_cols = [
+        "symbol",
+        "side",
+        "qty",
+        "entry_price",
+        "exit_price",
+        "entry_date",
+        "exit_date",
+        "pnl",
+        "notes",
+    ]
     df = df[[c for c in display_cols if c in df.columns]]
 
     # Colour P&L column

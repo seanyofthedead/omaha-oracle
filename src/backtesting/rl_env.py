@@ -74,9 +74,7 @@ class TradingEnv(gym.Env):
         c5 = (p[idx] / p[max(idx - 5, 0)] - 1) if p[max(idx - 5, 0)] > 0 else 0.0
         c20 = (p[idx] / p[max(idx - 20, 0)] - 1) if p[max(idx - 20, 0)] > 0 else 0.0
 
-        obs = np.array(
-            [cash_ratio, pos_ratio, unrealized, c1, c5, c20], dtype=np.float32
-        )
+        obs = np.array([cash_ratio, pos_ratio, unrealized, c1, c5, c20], dtype=np.float32)
         if self.features is not None:
             obs = np.concatenate([obs, self.features[self.current_step].astype(np.float32)])
         return obs
@@ -93,7 +91,9 @@ class TradingEnv(gym.Env):
                 self.shares = (invest - cost) / price
                 self.cash -= invest
                 self.entry_price = price
-                self.trades.append({"step": self.current_step, "action": "BUY", "price": float(price)})
+                self.trades.append(
+                    {"step": self.current_step, "action": "BUY", "price": float(price)}
+                )
 
         elif action == 2 and self.shares > 0:  # SELL
             proceeds = self.shares * price

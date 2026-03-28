@@ -44,9 +44,7 @@ def simulate_position_add(
     position_pcts_before = [
         (
             pos.get("ticker", "?"),
-            pos.get("market_value", 0) / portfolio_value * 100
-            if portfolio_value > 0
-            else 0,
+            pos.get("market_value", 0) / portfolio_value * 100 if portfolio_value > 0 else 0,
         )
         for pos in positions
     ]
@@ -58,14 +56,10 @@ def simulate_position_add(
     # Portfolio value stays the same (cash converted to position)
 
     cash_pct_after = (cash_after / portfolio_value * 100) if portfolio_value > 0 else 0
-    new_position_pct = (
-        (new_position_value / portfolio_value * 100) if portfolio_value > 0 else 0
-    )
+    new_position_pct = (new_position_value / portfolio_value * 100) if portfolio_value > 0 else 0
 
     # Check if ticker already exists
-    existing = next(
-        (p for p in positions if p.get("ticker", "").upper() == ticker.upper()), None
-    )
+    existing = next((p for p in positions if p.get("ticker", "").upper() == ticker.upper()), None)
     if existing:
         new_position_value += existing.get("market_value", 0)
         new_position_pct = (
@@ -86,9 +80,7 @@ def simulate_position_add(
         else 0
     )
     max_sector_name = (
-        max(sector_after, key=sector_after.get, default="N/A")
-        if sector_after
-        else "N/A"
+        max(sector_after, key=sector_after.get, default="N/A") if sector_after else "N/A"
     )
 
     # Check violations
@@ -98,16 +90,15 @@ def simulate_position_add(
             f"Insufficient cash: need ${cost:,.2f} but only ${cash_before:,.2f} available"
         )
     if cash_pct_after < 10:
-        violations.append(
-            f"Cash reserve violation: {cash_pct_after:.1f}% < 10% minimum"
-        )
+        violations.append(f"Cash reserve violation: {cash_pct_after:.1f}% < 10% minimum")
     if new_position_pct > 15:
         violations.append(
             f"Position concentration: {ticker} would be {new_position_pct:.1f}% > 15% max"
         )
     if max_sector_pct_after > 35:
         violations.append(
-            f"Sector concentration: {max_sector_name} would be {max_sector_pct_after:.1f}% > 35% max"
+            f"Sector concentration: {max_sector_name} would be "
+            f"{max_sector_pct_after:.1f}% > 35% max"
         )
 
     feasible = len(violations) == 0 and cash_after >= 0

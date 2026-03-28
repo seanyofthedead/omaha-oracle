@@ -98,7 +98,9 @@ class TestRunPipelineStages:
         mock_moat.side_effect = lambda e, c: {**e, "moat_score": 8}
         mock_mgmt.side_effect = lambda e, c: {**e, "management_score": 7}
         mock_iv.side_effect = lambda e, c: {
-            **e, "intrinsic_value_per_share": 180.0, "margin_of_safety": 0.35,
+            **e,
+            "intrinsic_value_per_share": 180.0,
+            "margin_of_safety": 0.35,
         }
 
         with patch("dashboard.search_runner.thesis_handler") as mock_thesis:
@@ -131,18 +133,32 @@ class TestRunThesisForQualifiers:
         mock_thesis.side_effect = lambda e, c: {**e, "thesis_generated": True}
         qualifiers = [
             SearchResult(
-                ticker="AAPL", company_name="Apple", moat_score=8,
-                management_score=7, margin_of_safety=0.35, intrinsic_value=180.0,
-                current_price=120.0, passed_all_gates=True,
+                ticker="AAPL",
+                company_name="Apple",
+                moat_score=8,
+                management_score=7,
+                margin_of_safety=0.35,
+                intrinsic_value=180.0,
+                current_price=120.0,
+                passed_all_gates=True,
                 gate_details={"moat": True, "management": True, "mos": True},
-                gates_passed_count=3, error=None, raw_result={"ticker": "AAPL"},
+                gates_passed_count=3,
+                error=None,
+                raw_result={"ticker": "AAPL"},
             ),
             SearchResult(
-                ticker="MSFT", company_name="Microsoft", moat_score=9,
-                management_score=8, margin_of_safety=0.40, intrinsic_value=400.0,
-                current_price=240.0, passed_all_gates=True,
+                ticker="MSFT",
+                company_name="Microsoft",
+                moat_score=9,
+                management_score=8,
+                margin_of_safety=0.40,
+                intrinsic_value=400.0,
+                current_price=240.0,
+                passed_all_gates=True,
                 gate_details={"moat": True, "management": True, "mos": True},
-                gates_passed_count=3, error=None, raw_result={"ticker": "MSFT"},
+                gates_passed_count=3,
+                error=None,
+                raw_result={"ticker": "MSFT"},
             ),
         ]
         updated = _run_thesis_for_qualifiers(qualifiers)
@@ -154,11 +170,18 @@ class TestRunThesisForQualifiers:
         mock_thesis.side_effect = Exception("Opus budget exhausted")
         qualifiers = [
             SearchResult(
-                ticker="AAPL", company_name="Apple", moat_score=8,
-                management_score=7, margin_of_safety=0.35, intrinsic_value=180.0,
-                current_price=120.0, passed_all_gates=True,
+                ticker="AAPL",
+                company_name="Apple",
+                moat_score=8,
+                management_score=7,
+                margin_of_safety=0.35,
+                intrinsic_value=180.0,
+                current_price=120.0,
+                passed_all_gates=True,
                 gate_details={"moat": True, "management": True, "mos": True},
-                gates_passed_count=3, error=None, raw_result={"ticker": "AAPL"},
+                gates_passed_count=3,
+                error=None,
+                raw_result={"ticker": "AAPL"},
             ),
         ]
         updated = _run_thesis_for_qualifiers(qualifiers)
@@ -291,9 +314,7 @@ class TestRunSearch:
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
-    def test_search_stops_on_cancel(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
-    ):
+    def test_search_stops_on_cancel(self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline):
         mock_gen = MagicMock()
         mock_gen.generate_batch.return_value = [f"T{i}" for i in range(20)]
         mock_gen.get_cik.return_value = "0000000001"
@@ -461,9 +482,7 @@ class TestRunSearch:
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
-    def test_search_returns_near_misses(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
-    ):
+    def test_search_returns_near_misses(self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline):
         mock_gen = MagicMock()
         # generate_batch(0) for init, then one batch, then empty to stop
         mock_gen.generate_batch.side_effect = [[], ["NEAR"], []]
