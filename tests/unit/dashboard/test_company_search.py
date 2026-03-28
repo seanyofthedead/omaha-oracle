@@ -6,8 +6,6 @@ import ast
 import inspect
 import threading
 
-import pytest
-
 
 class TestThreadSafeProgress:
     def test_search_progress_dict_is_thread_safe(self):
@@ -20,11 +18,13 @@ class TestThreadSafeProgress:
         def writer():
             try:
                 for i in range(100):
-                    progress.update({
-                        "count": i,
-                        "results": list(range(i % 10)),
-                        "ticker": f"T{i}",
-                    })
+                    progress.update(
+                        {
+                            "count": i,
+                            "results": list(range(i % 10)),
+                            "ticker": f"T{i}",
+                        }
+                    )
                     progress["action"] = f"Processing T{i}"
             except Exception as exc:
                 errors.append(exc)
@@ -74,6 +74,4 @@ class TestNoSleepInRenderProgress:
                 ):
                     sleep_calls.append(node.lineno)
 
-        assert not sleep_calls, (
-            f"time.sleep found in _render_progress at line(s): {sleep_calls}"
-        )
+        assert not sleep_calls, f"time.sleep found in _render_progress at line(s): {sleep_calls}"

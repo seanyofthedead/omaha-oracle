@@ -95,7 +95,7 @@ def render_sidebar(page_names: list[str]) -> str:
     # ── Auto-Refresh ──
     auto_refresh = st.sidebar.toggle("Auto-refresh", value=False, key="auto_refresh")
     if auto_refresh:
-        refresh_interval = st.sidebar.select_slider(
+        st.sidebar.select_slider(
             "Interval",
             options=[1, 5, 10, 30],
             value=5,

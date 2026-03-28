@@ -40,7 +40,7 @@ class TestToastNotRepeatedOnRerun:
                         stripped = lines[j].strip()
                         if stripped:
                             assert "page_toast_shown" in stripped, (
-                                f"{view_name}: st.toast at line {i+1} is not "
+                                f"{view_name}: st.toast at line {i + 1} is not "
                                 f"guarded by a page_toast_shown check "
                                 f"(preceding line: {stripped!r})."
                             )

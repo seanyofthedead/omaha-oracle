@@ -422,9 +422,7 @@ def render() -> None:
 
     with tab_scenario:
         st.subheader("What-If Scenario")
-        st.caption(
-            "Simulate adding a new position to see the impact on portfolio guardrails."
-        )
+        st.caption("Simulate adding a new position to see the impact on portfolio guardrails.")
 
         col_input, col_result = st.columns([1, 2])
 
@@ -452,9 +450,7 @@ def render() -> None:
                         "Unknown",
                     ],
                 )
-                sc_submit = st.form_submit_button(
-                    "Run Scenario", use_container_width=True
-                )
+                sc_submit = st.form_submit_button("Run Scenario", use_container_width=True)
 
         with col_result:
             if sc_submit and sc_ticker:

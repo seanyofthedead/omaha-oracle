@@ -84,7 +84,9 @@ def generate_letter(
     system_prompt = system_prompt.replace("{{audit_summary}}", json.dumps(audit_summary, indent=2))
     system_prompt = system_prompt.replace("{{decision_audit}}", audit_text)
     system_prompt = system_prompt.replace("{{portfolio_summary}}", portfolio_text)
-    system_prompt = system_prompt.replace("{{previous_lessons}}", previous_lessons + prediction_context)
+    system_prompt = system_prompt.replace(
+        "{{previous_lessons}}", previous_lessons + prediction_context
+    )
 
     user_prompt = f"Write the full Owner's Letter for {quarter}. Be brutally honest."
 

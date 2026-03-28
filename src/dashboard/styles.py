@@ -177,7 +177,8 @@ _DARK_CSS = """
     padding-top: 1.5rem;
 }
 
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] {
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"]
+> [data-testid="stVerticalBlockBorderWrapper"] {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding-bottom: 0.75rem;
     margin-bottom: 0.75rem;

@@ -25,18 +25,20 @@ from shared.logger import get_logger
 _log = get_logger(__name__)
 
 # Canonical metric names and their analysis stage mapping
-ALLOWED_METRICS = frozenset({
-    "revenue",
-    "earnings_per_share",
-    "gross_margin",
-    "operating_margin",
-    "net_margin",
-    "book_value_per_share",
-    "debt_to_equity",
-    "free_cash_flow",
-    "return_on_equity",
-    "stock_price",
-})
+ALLOWED_METRICS = frozenset(
+    {
+        "revenue",
+        "earnings_per_share",
+        "gross_margin",
+        "operating_margin",
+        "net_margin",
+        "book_value_per_share",
+        "debt_to_equity",
+        "free_cash_flow",
+        "return_on_equity",
+        "stock_price",
+    }
+)
 
 METRIC_TO_STAGE: dict[str, str] = {
     "revenue": "intrinsic_value",

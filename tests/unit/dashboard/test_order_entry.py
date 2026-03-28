@@ -20,7 +20,6 @@ from dashboard.views.order_entry import (
     validate_order_params,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 
@@ -64,106 +63,158 @@ def _mock_client() -> MagicMock:
 class TestValidateOrderParams:
     def test_valid_market_order(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="10", side="buy",
-            order_type="market", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="AAPL",
+            qty="10",
+            side="buy",
+            order_type="market",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert errors == []
 
     def test_missing_symbol(self):
         errors = validate_order_params(
-            symbol="", qty="10", side="buy",
-            order_type="market", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="",
+            qty="10",
+            side="buy",
+            order_type="market",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert any("symbol" in e.lower() for e in errors)
 
     def test_missing_qty(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="", side="buy",
-            order_type="market", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="AAPL",
+            qty="",
+            side="buy",
+            order_type="market",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert any("quantity" in e.lower() for e in errors)
 
     def test_zero_qty(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="0", side="buy",
-            order_type="market", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="AAPL",
+            qty="0",
+            side="buy",
+            order_type="market",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert any("quantity" in e.lower() for e in errors)
 
     def test_negative_qty(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="-5", side="buy",
-            order_type="market", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="AAPL",
+            qty="-5",
+            side="buy",
+            order_type="market",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert any("quantity" in e.lower() for e in errors)
 
     def test_non_numeric_qty(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="abc", side="buy",
-            order_type="market", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="AAPL",
+            qty="abc",
+            side="buy",
+            order_type="market",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert any("quantity" in e.lower() for e in errors)
 
     def test_limit_order_missing_limit_price(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="10", side="buy",
-            order_type="limit", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="AAPL",
+            qty="10",
+            side="buy",
+            order_type="limit",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert any("limit price" in e.lower() for e in errors)
 
     def test_limit_order_valid(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="10", side="buy",
-            order_type="limit", time_in_force="gtc",
-            limit_price="150.50", stop_price="",
+            symbol="AAPL",
+            qty="10",
+            side="buy",
+            order_type="limit",
+            time_in_force="gtc",
+            limit_price="150.50",
+            stop_price="",
         )
         assert errors == []
 
     def test_stop_order_missing_stop_price(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="10", side="sell",
-            order_type="stop", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="AAPL",
+            qty="10",
+            side="sell",
+            order_type="stop",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert any("stop price" in e.lower() for e in errors)
 
     def test_stop_limit_missing_both_prices(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="10", side="sell",
-            order_type="stop_limit", time_in_force="day",
-            limit_price="", stop_price="",
+            symbol="AAPL",
+            qty="10",
+            side="sell",
+            order_type="stop_limit",
+            time_in_force="day",
+            limit_price="",
+            stop_price="",
         )
         assert any("limit price" in e.lower() for e in errors)
         assert any("stop price" in e.lower() for e in errors)
 
     def test_stop_limit_valid(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="2", side="sell",
-            order_type="stop_limit", time_in_force="day",
-            limit_price="200.00", stop_price="195.00",
+            symbol="AAPL",
+            qty="2",
+            side="sell",
+            order_type="stop_limit",
+            time_in_force="day",
+            limit_price="200.00",
+            stop_price="195.00",
         )
         assert errors == []
 
     def test_negative_limit_price(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="10", side="buy",
-            order_type="limit", time_in_force="day",
-            limit_price="-5", stop_price="",
+            symbol="AAPL",
+            qty="10",
+            side="buy",
+            order_type="limit",
+            time_in_force="day",
+            limit_price="-5",
+            stop_price="",
         )
         assert any("limit price" in e.lower() for e in errors)
 
     def test_negative_stop_price(self):
         errors = validate_order_params(
-            symbol="AAPL", qty="10", side="sell",
-            order_type="stop", time_in_force="day",
-            limit_price="", stop_price="-10",
+            symbol="AAPL",
+            qty="10",
+            side="sell",
+            order_type="stop",
+            time_in_force="day",
+            limit_price="",
+            stop_price="-10",
         )
         assert any("stop price" in e.lower() for e in errors)
 
@@ -315,8 +366,12 @@ class TestSubmitOrderSafe:
         client = _mock_client()
         client.submit_order.return_value = _make_order(status="new")
         ok, result = submit_order_safe(
-            client, symbol="AAPL", qty=5.0, side="buy",
-            order_type="market", time_in_force="day",
+            client,
+            symbol="AAPL",
+            qty=5.0,
+            side="buy",
+            order_type="market",
+            time_in_force="day",
         )
         assert ok is True
         assert isinstance(result, OrderInfo)
@@ -326,23 +381,35 @@ class TestSubmitOrderSafe:
         client = _mock_client()
         client.submit_order.return_value = _make_order(status="new")
         ok, result = submit_order_safe(
-            client, symbol="GOOG", qty=3.0, side="buy",
-            order_type="limit", time_in_force="gtc",
+            client,
+            symbol="GOOG",
+            qty=3.0,
+            side="buy",
+            order_type="limit",
+            time_in_force="gtc",
             limit_price=140.0,
         )
         assert ok is True
         client.submit_order.assert_called_once_with(
-            symbol="GOOG", qty=3.0, side="buy",
-            order_type="limit", time_in_force="gtc",
-            limit_price=140.0, stop_price=None,
+            symbol="GOOG",
+            qty=3.0,
+            side="buy",
+            order_type="limit",
+            time_in_force="gtc",
+            limit_price=140.0,
+            stop_price=None,
         )
 
     def test_insufficient_buying_power(self):
         client = _mock_client()
         client.submit_order.side_effect = _make_api_error(403, "insufficient buying power")
         ok, msg = submit_order_safe(
-            client, symbol="BRK.A", qty=1.0, side="buy",
-            order_type="market", time_in_force="day",
+            client,
+            symbol="BRK.A",
+            qty=1.0,
+            side="buy",
+            order_type="market",
+            time_in_force="day",
         )
         assert ok is False
         assert "buying power" in msg.lower()
@@ -351,8 +418,12 @@ class TestSubmitOrderSafe:
         client = _mock_client()
         client.submit_order.side_effect = _make_api_error(403, "market is not open")
         ok, msg = submit_order_safe(
-            client, symbol="AAPL", qty=1.0, side="buy",
-            order_type="market", time_in_force="day",
+            client,
+            symbol="AAPL",
+            qty=1.0,
+            side="buy",
+            order_type="market",
+            time_in_force="day",
         )
         assert ok is False
         assert "closed" in msg.lower() or "market" in msg.lower()
@@ -361,20 +432,26 @@ class TestSubmitOrderSafe:
         client = _mock_client()
         client.submit_order.side_effect = _make_api_error(404, "asset not found")
         ok, msg = submit_order_safe(
-            client, symbol="XYZZZZ", qty=1.0, side="buy",
-            order_type="market", time_in_force="day",
+            client,
+            symbol="XYZZZZ",
+            qty=1.0,
+            side="buy",
+            order_type="market",
+            time_in_force="day",
         )
         assert ok is False
         assert "symbol" in msg.lower() or "ticker" in msg.lower()
 
     def test_pdt_violation(self):
         client = _mock_client()
-        client.submit_order.side_effect = _make_api_error(
-            403, "pattern day trading protection"
-        )
+        client.submit_order.side_effect = _make_api_error(403, "pattern day trading protection")
         ok, msg = submit_order_safe(
-            client, symbol="AAPL", qty=1.0, side="buy",
-            order_type="market", time_in_force="day",
+            client,
+            symbol="AAPL",
+            qty=1.0,
+            side="buy",
+            order_type="market",
+            time_in_force="day",
         )
         assert ok is False
         assert "day trad" in msg.lower()
@@ -383,8 +460,12 @@ class TestSubmitOrderSafe:
         client = _mock_client()
         client.submit_order.side_effect = _make_api_error(429, "rate limit exceeded")
         ok, msg = submit_order_safe(
-            client, symbol="AAPL", qty=1.0, side="buy",
-            order_type="market", time_in_force="day",
+            client,
+            symbol="AAPL",
+            qty=1.0,
+            side="buy",
+            order_type="market",
+            time_in_force="day",
         )
         assert ok is False
         assert "rate limit" in msg.lower()
@@ -393,8 +474,12 @@ class TestSubmitOrderSafe:
         client = _mock_client()
         client.submit_order.side_effect = _make_api_error(401, "unauthorized")
         ok, msg = submit_order_safe(
-            client, symbol="AAPL", qty=1.0, side="buy",
-            order_type="market", time_in_force="day",
+            client,
+            symbol="AAPL",
+            qty=1.0,
+            side="buy",
+            order_type="market",
+            time_in_force="day",
         )
         assert ok is False
         assert "auth" in msg.lower()
@@ -405,8 +490,12 @@ class TestSubmitOrderSafe:
         client = _mock_client()
         client.submit_order.side_effect = Timeout("timed out")
         ok, msg = submit_order_safe(
-            client, symbol="AAPL", qty=1.0, side="buy",
-            order_type="market", time_in_force="day",
+            client,
+            symbol="AAPL",
+            qty=1.0,
+            side="buy",
+            order_type="market",
+            time_in_force="day",
         )
         assert ok is False
         assert "timed out" in msg.lower() or "timeout" in msg.lower()

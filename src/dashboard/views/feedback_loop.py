@@ -372,9 +372,7 @@ def render() -> None:
                     st.markdown(f"**Rule:** {lesson.get('actionable_rule', '')}")
                     st.markdown(f"**Prompt text:** {lesson.get('prompt_injection_text', '')}")
 
-                    if st.button(
-                        "Retire this lesson", key=f"retire_{lesson.get('lesson_id', '')}"
-                    ):
+                    if st.button("Retire this lesson", key=f"retire_{lesson.get('lesson_id', '')}"):
                         try:
                             retire_lesson(lesson["lesson_type"], lesson["lesson_id"])
                             st.success("Lesson retired.")

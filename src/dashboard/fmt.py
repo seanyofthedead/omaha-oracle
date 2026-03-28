@@ -191,7 +191,9 @@ def fmt_datetime(value: str | datetime | None) -> str:
 # ── Export ─────────────────────────────────────────────────────────────
 
 
-def render_export_button(df: pd.DataFrame, filename_prefix: str, label: str = "Download CSV") -> None:
+def render_export_button(
+    df: pd.DataFrame, filename_prefix: str, label: str = "Download CSV"
+) -> None:
     """Render a Streamlit download button that exports *df* as CSV.
 
     The downloaded file is named ``omaha_oracle_{prefix}_{YYYY-MM-DD}.csv``.

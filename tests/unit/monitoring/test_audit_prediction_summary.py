@@ -4,7 +4,7 @@ Unit tests for prediction summary integration in outcome audit.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from monitoring.owners_letter.audit import run_outcome_audit

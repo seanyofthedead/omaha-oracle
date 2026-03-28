@@ -7,8 +7,6 @@ metric, threshold, and actual value.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import streamlit as st
 
 from dashboard.data import DataLoadError, load_predictions
@@ -36,7 +34,6 @@ def render() -> None:
     total = len(predictions)
     pending = sum(1 for p in predictions if p["status"] == "pending")
     confirmed = sum(1 for p in predictions if p["status"] == "CONFIRMED")
-    falsified = sum(1 for p in predictions if p["status"] == "FALSIFIED")
     unresolvable = sum(1 for p in predictions if p["status"] == "UNRESOLVABLE")
 
     col1, col2, col3, col4 = st.columns(4)

@@ -63,9 +63,7 @@ def delete_watchlist(client: AlpacaClient, watchlist_id: str) -> None:
     client.delete_watchlist(watchlist_id)
 
 
-def rename_watchlist(
-    client: AlpacaClient, watchlist_id: str, new_name: str
-) -> WatchlistInfo:
+def rename_watchlist(client: AlpacaClient, watchlist_id: str, new_name: str) -> WatchlistInfo:
     """Rename a watchlist, rejecting empty or duplicate names."""
     if not new_name or not new_name.strip():
         raise ValueError("Watchlist name must not be empty.")

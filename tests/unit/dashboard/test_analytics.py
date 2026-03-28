@@ -221,9 +221,7 @@ class TestBuildJournalEntries:
     def test_round_trip_trade(self):
         from dashboard.analytics import build_journal_entries
 
-        entries = build_journal_entries(
-            [_FILLED_ORDER_BUY, _FILLED_ORDER_SELL]
-        )
+        entries = build_journal_entries([_FILLED_ORDER_BUY, _FILLED_ORDER_SELL])
         assert len(entries) == 1
         e = entries[0]
         assert e["symbol"] == "AAPL"
@@ -236,9 +234,7 @@ class TestBuildJournalEntries:
     def test_losing_trade(self):
         from dashboard.analytics import build_journal_entries
 
-        entries = build_journal_entries(
-            [_FILLED_ORDER_LOSS, _FILLED_ORDER_LOSS_EXIT]
-        )
+        entries = build_journal_entries([_FILLED_ORDER_LOSS, _FILLED_ORDER_LOSS_EXIT])
         assert len(entries) == 1
         assert entries[0]["pnl"] == pytest.approx(-100.0)  # (380-400)*5
 
@@ -246,8 +242,7 @@ class TestBuildJournalEntries:
         from dashboard.analytics import build_journal_entries
 
         entries = build_journal_entries(
-            [_FILLED_ORDER_BUY, _FILLED_ORDER_SELL,
-             _FILLED_ORDER_LOSS, _FILLED_ORDER_LOSS_EXIT]
+            [_FILLED_ORDER_BUY, _FILLED_ORDER_SELL, _FILLED_ORDER_LOSS, _FILLED_ORDER_LOSS_EXIT]
         )
         assert len(entries) == 2
         symbols = {e["symbol"] for e in entries}
@@ -305,9 +300,7 @@ class TestPrepareEquityChartData:
     def test_empty_history(self):
         from dashboard.analytics import PortfolioHistory, prepare_equity_chart_data
 
-        history = PortfolioHistory(
-            timestamps=[], equity=[], profit_loss_pct=[], base_value=0.0
-        )
+        history = PortfolioHistory(timestamps=[], equity=[], profit_loss_pct=[], base_value=0.0)
         df = prepare_equity_chart_data(history)
         assert len(df) == 0
 

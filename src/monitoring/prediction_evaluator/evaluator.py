@@ -89,7 +89,6 @@ def evaluate_matured_predictions(
     Returns a list of evaluation result dicts:
         {ticker, decision_id, prediction, status, actual_value}
     """
-    now_iso = datetime.now(UTC).isoformat()
     now_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
     # Query all DECISION records via GSI
@@ -133,8 +132,11 @@ def evaluate_matured_predictions(
             data_source = pred.get("data_source", "yahoo_finance")
 
             actual = fetch_actual(
-                metric, ticker, data_source,
-                companies_client, financials_client,
+                metric,
+                ticker,
+                data_source,
+                companies_client,
+                financials_client,
                 as_of_date=deadline,
             )
 
@@ -149,14 +151,16 @@ def evaluate_matured_predictions(
 
             _update_prediction_status(decisions_client, decision, i, status, actual)
 
-            results.append({
-                "ticker": ticker,
-                "sector": payload.get("sector") or decision.get("sector") or "",
-                "decision_id": decision.get("decision_id", ""),
-                "prediction": pred,
-                "status": status,
-                "actual_value": actual,
-            })
+            results.append(
+                {
+                    "ticker": ticker,
+                    "sector": payload.get("sector") or decision.get("sector") or "",
+                    "decision_id": decision.get("decision_id", ""),
+                    "prediction": pred,
+                    "status": status,
+                    "actual_value": actual,
+                }
+            )
 
     _log.info(
         "Prediction evaluation complete",

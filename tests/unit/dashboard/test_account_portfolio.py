@@ -240,8 +240,16 @@ class TestRenderPositionsTable:
 
         df = mock_st.dataframe.call_args.args[0]
         columns = list(df.columns)
-        for expected in ["Symbol", "Qty", "Side", "Avg Entry", "Current Price",
-                         "Market Value", "Unrealized P&L", "P&L %"]:
+        for expected in [
+            "Symbol",
+            "Qty",
+            "Side",
+            "Avg Entry",
+            "Current Price",
+            "Market Value",
+            "Unrealized P&L",
+            "P&L %",
+        ]:
             assert expected in columns, f"Missing column: {expected}"
 
     def test_pl_percentage_calculated_correctly(self, mock_st, mock_client):
@@ -338,9 +346,9 @@ class TestErrorStates:
         """Rate limit on get_account is handled via handle_alpaca_error."""
         import json
 
+        from alpaca.common.exceptions import APIError
         from requests import HTTPError, Response
 
-        from alpaca.common.exceptions import APIError
         from dashboard.views.account_portfolio import render_account_overview
 
         body = json.dumps({"code": 42900000, "message": "rate limit exceeded"})
@@ -357,9 +365,9 @@ class TestErrorStates:
         """Auth failure on get_positions is handled via handle_alpaca_error."""
         import json
 
+        from alpaca.common.exceptions import APIError
         from requests import HTTPError, Response
 
-        from alpaca.common.exceptions import APIError
         from dashboard.views.account_portfolio import render_positions_table
 
         body = json.dumps({"code": 40110000, "message": "unauthorized"})

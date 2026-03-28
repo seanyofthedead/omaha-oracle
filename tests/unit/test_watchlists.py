@@ -28,6 +28,7 @@ from dashboard.alpaca_models import WatchlistInfo
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_client() -> MagicMock:
     """Return a mock AlpacaClient with sensible defaults."""
     client = MagicMock()

@@ -92,7 +92,10 @@ class TestResultsDisplay:
 class TestPdfWarning:
     """After uploading a PDF, st.warning must be called with extraction-limitation notice."""
 
-    @patch("dashboard.views.upload_analysis.store_uploaded_file", return_value="uploads/AAPL/2025/10-K/ts.pdf")
+    @patch(
+        "dashboard.views.upload_analysis.store_uploaded_file",
+        return_value="uploads/AAPL/2025/10-K/ts.pdf",
+    )
     @patch("dashboard.views.upload_analysis.run_upload_analysis", return_value={"ticker": "AAPL"})
     @patch("dashboard.views.upload_analysis.build_analysis_event", return_value={"ticker": "AAPL"})
     @patch("dashboard.views.upload_analysis.extract_filing_text")

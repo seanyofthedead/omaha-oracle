@@ -98,10 +98,7 @@ class TestNoNewWarnings:
             for mod_path in new_modules:
                 importlib.import_module(mod_path)
 
-        deprecations = [
-            w for w in caught if issubclass(w.category, DeprecationWarning)
-        ]
-        assert deprecations == [], (
-            "Deprecation warnings found:\n"
-            + "\n".join(f"  {w.filename}:{w.lineno}: {w.message}" for w in deprecations)
+        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert deprecations == [], "Deprecation warnings found:\n" + "\n".join(
+            f"  {w.filename}:{w.lineno}: {w.message}" for w in deprecations
         )

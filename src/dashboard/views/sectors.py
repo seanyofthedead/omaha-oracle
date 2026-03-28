@@ -7,7 +7,6 @@ import streamlit as st
 
 from dashboard.data import DataLoadError, load_portfolio
 
-
 # Sector ETF mapping for performance data
 _SECTOR_ETFS = {
     "Technology": "XLK",
@@ -79,10 +78,7 @@ def render() -> None:
         weights = [s[1] for s in sorted_sectors]
 
         fig = go.Figure()
-        colors = [
-            "#F44336" if w > 35 else "#FF9800" if w > 25 else "#6C9EFF"
-            for w in weights
-        ]
+        colors = ["#F44336" if w > 35 else "#FF9800" if w > 25 else "#6C9EFF" for w in weights]
         fig.add_trace(
             go.Bar(
                 x=weights,
@@ -144,9 +140,7 @@ def render() -> None:
             " Compares your portfolio allocation to market performance."
         )
 
-        period = st.radio(
-            "Period", ["1mo", "3mo", "6mo", "1y"], index=3, horizontal=True
-        )
+        period = st.radio("Period", ["1mo", "3mo", "6mo", "1y"], index=3, horizontal=True)
 
         try:
             import yfinance as yf
@@ -157,11 +151,7 @@ def render() -> None:
 
             if not data.empty:
                 # Calculate returns
-                close = (
-                    data["Close"]
-                    if "Close" in data.columns.get_level_values(0)
-                    else data
-                )
+                close = data["Close"] if "Close" in data.columns.get_level_values(0) else data
                 returns = {}
                 for sector, etf in _SECTOR_ETFS.items():
                     if etf in close.columns:
@@ -171,22 +161,16 @@ def render() -> None:
                             returns[sector] = round(float(ret), 2)
 
                 if returns:
-                    sorted_returns = sorted(
-                        returns.items(), key=lambda x: x[1], reverse=True
-                    )
+                    sorted_returns = sorted(returns.items(), key=lambda x: x[1], reverse=True)
                     sectors_r = [s[0] for s in sorted_returns]
                     rets = [s[1] for s in sorted_returns]
-                    colors_r = [
-                        "#4CAF50" if r >= 0 else "#F44336" for r in rets
-                    ]
+                    colors_r = ["#4CAF50" if r >= 0 else "#F44336" for r in rets]
 
                     # Mark sectors we own
                     annotations = []
                     for s in sectors_r:
                         if s in sector_pcts:
-                            annotations.append(
-                                f"{s} ({sector_pcts[s]:.0f}% held)"
-                            )
+                            annotations.append(f"{s} ({sector_pcts[s]:.0f}% held)")
                         else:
                             annotations.append(s)
 
@@ -210,20 +194,14 @@ def render() -> None:
 
                     # Opportunity callout
                     held_sectors = set(sector_pcts.keys())
-                    top_performers = [
-                        s
-                        for s, r in sorted_returns[:3]
-                        if s not in held_sectors
-                    ]
+                    top_performers = [s for s, r in sorted_returns[:3] if s not in held_sectors]
                     if top_performers:
                         st.info(
                             "Top-performing sectors not in your portfolio:"
                             f" **{', '.join(top_performers)}**"
                         )
                 else:
-                    st.warning(
-                        "Could not calculate returns from price data."
-                    )
+                    st.warning("Could not calculate returns from price data.")
             else:
                 st.warning("No sector ETF data available.")
         except ImportError:
@@ -234,8 +212,7 @@ def render() -> None:
     with tab_heatmap:
         st.subheader("Portfolio Concentration Heatmap")
         st.caption(
-            "Visualize how your portfolio is distributed across sectors"
-            " and individual positions."
+            "Visualize how your portfolio is distributed across sectors and individual positions."
         )
 
         if not positions:
@@ -253,9 +230,7 @@ def render() -> None:
             parents.append("Portfolio")
             values.append(sector_weights[sector])
             pct = sector_pcts.get(sector, 0)
-            colors_tm.append(
-                "#F44336" if pct > 35 else "#FF9800" if pct > 25 else "#6C9EFF"
-            )
+            colors_tm.append("#F44336" if pct > 35 else "#FF9800" if pct > 25 else "#6C9EFF")
 
             for pos in positions:
                 if pos.get("sector") == sector:
@@ -264,12 +239,8 @@ def render() -> None:
                     labels.append(ticker)
                     parents.append(sector)
                     values.append(mv)
-                    pos_pct = (
-                        (mv / portfolio_value * 100) if portfolio_value > 0 else 0
-                    )
-                    colors_tm.append(
-                        "#F44336" if pos_pct > 15 else "#4CAF50"
-                    )
+                    pos_pct = (mv / portfolio_value * 100) if portfolio_value > 0 else 0
+                    colors_tm.append("#F44336" if pos_pct > 15 else "#4CAF50")
 
         labels.insert(0, "Portfolio")
         parents.insert(0, "")

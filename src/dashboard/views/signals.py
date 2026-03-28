@@ -91,9 +91,7 @@ def _render_paginated_cards(signals: list[dict], tab_name: str) -> None:
                 st.session_state[page_key] -= 1
                 st.rerun()
         with col_info:
-            st.caption(
-                f"Page {st.session_state[page_key] + 1} of {total_pages}"
-            )
+            st.caption(f"Page {st.session_state[page_key] + 1} of {total_pages}")
         with col_next:
             if st.button(
                 "Next \u2192",
@@ -149,14 +147,12 @@ def render() -> None:
             new_buys = sum(
                 1
                 for d in decisions
-                if d.get("timestamp", "") > last_seen
-                and (d.get("signal") or "").upper() == "BUY"
+                if d.get("timestamp", "") > last_seen and (d.get("signal") or "").upper() == "BUY"
             )
             new_sells = sum(
                 1
                 for d in decisions
-                if d.get("timestamp", "") > last_seen
-                and (d.get("signal") or "").upper() == "SELL"
+                if d.get("timestamp", "") > last_seen and (d.get("signal") or "").upper() == "SELL"
             )
 
             parts = []
@@ -178,39 +174,23 @@ def render() -> None:
 
     ticker_filter = st.session_state.get("signal_ticker_filter", "").strip().upper()
     if ticker_filter:
-        filtered = [
-            d for d in filtered if ticker_filter in d.get("ticker", "").upper()
-        ]
+        filtered = [d for d in filtered if ticker_filter in d.get("ticker", "").upper()]
 
     date_range = st.session_state.get("signal_date_range")
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start_str, end_str = str(date_range[0]), str(date_range[1])
-        filtered = [
-            d
-            for d in filtered
-            if start_str <= d.get("timestamp", "")[:10] <= end_str
-        ]
+        filtered = [d for d in filtered if start_str <= d.get("timestamp", "")[:10] <= end_str]
 
     # Classify decisions
-    buy_decisions = [
-        d for d in filtered if (d.get("signal") or "").upper() == "BUY"
-    ]
-    sell_decisions = [
-        d for d in filtered if (d.get("signal") or "").upper() == "SELL"
-    ]
+    buy_decisions = [d for d in filtered if (d.get("signal") or "").upper() == "BUY"]
+    sell_decisions = [d for d in filtered if (d.get("signal") or "").upper() == "SELL"]
     other_decisions = [
-        d
-        for d in filtered
-        if (d.get("signal") or "").upper() not in ("BUY", "SELL")
+        d for d in filtered if (d.get("signal") or "").upper() not in ("BUY", "SELL")
     ]
-    latest_ts = (
-        fmt_date(filtered[0].get("timestamp")) if filtered else fmt_null(None)
-    )
+    latest_ts = fmt_date(filtered[0].get("timestamp")) if filtered else fmt_null(None)
 
     # ── Tier 1: Hero metrics ──
-    col1, col2, col3, col4 = st.columns(
-        4, gap="large", vertical_alignment="bottom"
-    )
+    col1, col2, col3, col4 = st.columns(4, gap="large", vertical_alignment="bottom")
     with col1:
         st.metric(
             "Total Signals",
@@ -317,9 +297,7 @@ def render() -> None:
                         y=[d.get("ticker", "") for d in buy_decisions],
                         mode="markers",
                         name="BUY",
-                        marker=dict(
-                            color="#4CAF50", size=12, symbol="triangle-up"
-                        ),
+                        marker=dict(color="#4CAF50", size=12, symbol="triangle-up"),
                     )
                 )
             if sell_decisions:
@@ -329,9 +307,7 @@ def render() -> None:
                         y=[d.get("ticker", "") for d in sell_decisions],
                         mode="markers",
                         name="SELL",
-                        marker=dict(
-                            color="#F44336", size=12, symbol="triangle-down"
-                        ),
+                        marker=dict(color="#F44336", size=12, symbol="triangle-down"),
                     )
                 )
             if other_decisions:

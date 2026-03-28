@@ -268,9 +268,7 @@ class TestSubmitOrder:
 
     def test_insufficient_buying_power(self):
         tc = _mock_trading_client()
-        tc.submit_order.side_effect = _make_api_error(
-            403, 40310000, "insufficient buying power"
-        )
+        tc.submit_order.side_effect = _make_api_error(403, 40310000, "insufficient buying power")
         client = _make_client(tc)
 
         with pytest.raises(Exception):
@@ -365,9 +363,7 @@ class TestCancelOrder:
 
     def test_order_not_found(self):
         tc = _mock_trading_client()
-        tc.cancel_order_by_id.side_effect = _make_api_error(
-            404, 40410000, "order not found"
-        )
+        tc.cancel_order_by_id.side_effect = _make_api_error(404, 40410000, "order not found")
         client = _make_client(tc)
 
         with pytest.raises(Exception):
@@ -391,9 +387,7 @@ class TestClosePosition:
 
     def test_no_position(self):
         tc = _mock_trading_client()
-        tc.close_position.side_effect = _make_api_error(
-            404, 40410000, "position does not exist"
-        )
+        tc.close_position.side_effect = _make_api_error(404, 40410000, "position does not exist")
         client = _make_client(tc)
 
         with pytest.raises(Exception):
@@ -480,9 +474,7 @@ class TestCreateWatchlist:
 class TestAddToWatchlist:
     def test_success(self):
         tc = _mock_trading_client()
-        tc.add_asset_to_watchlist_by_id.return_value = _fake_watchlist(
-            "Tech", ["AAPL", "MSFT"]
-        )
+        tc.add_asset_to_watchlist_by_id.return_value = _fake_watchlist("Tech", ["AAPL", "MSFT"])
         client = _make_client(tc)
 
         result = client.add_to_watchlist(str(_UUID), "MSFT")

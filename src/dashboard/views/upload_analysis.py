@@ -106,8 +106,7 @@ def _handle_submission(
 
     if "not yet supported" in filing_context.lower():
         st.warning(
-            "PDF text extraction is not yet supported. "
-            "Analysis will be based on metadata only."
+            "PDF text extraction is not yet supported. Analysis will be based on metadata only."
         )
 
     # Build extra metrics
@@ -131,7 +130,9 @@ def _handle_submission(
             status.update(label="Analysis complete!", state="complete")
         except Exception:
             _log.exception("Pipeline failed")
-            st.error("Analysis pipeline encountered an error. Please try again or check server logs.")
+            st.error(
+                "Analysis pipeline encountered an error. Please try again or check server logs."
+            )
             status.update(label="Pipeline failed", state="error")
 
 

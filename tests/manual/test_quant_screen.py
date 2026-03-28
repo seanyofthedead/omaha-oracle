@@ -329,28 +329,16 @@ def _print_scorecard(name: str, ticker: str, result: dict, failed: list[str], pa
     print(f"  P/B < {th['pb_max']}:        {pb:.1f}  {'PASS' if pb_ok else 'FAIL'}")
     de_val = result.get("debt_equity", 0)
     de_status = "PASS" if de_ok else "FAIL"
-    print(
-        f"  D/E < {th['debt_equity_max']}:        "
-        f"{de_val:.2f}  {de_status}"
-    )
+    print(f"  D/E < {th['debt_equity_max']}:        {de_val:.2f}  {de_status}")
     roic_val = result.get("roic_10y_avg", 0) * 100
     roic_status = "PASS" if roic_ok else "FAIL"
-    print(
-        f"  ROIC 10y >= {th['roic_10y_min_pct']}%:   "
-        f"{roic_val:.1f}%  {roic_status}"
-    )
+    print(f"  ROIC 10y >= {th['roic_10y_min_pct']}%:   {roic_val:.1f}%  {roic_status}")
     fcf_val = result.get("positive_fcf_years", 0)
     fcf_status = "PASS" if fcf_ok else "FAIL"
-    print(
-        f"  FCF+ yrs >= {th['positive_fcf_min_years']}:     "
-        f"{fcf_val}  {fcf_status}"
-    )
+    print(f"  FCF+ yrs >= {th['positive_fcf_min_years']}:     {fcf_val}  {fcf_status}")
     piot_val = result.get("piotroski_score", 0)
     piot_status = "PASS" if piot_ok else "FAIL"
-    print(
-        f"  Piotroski >= {th['piotroski_min']}:    "
-        f"{piot_val}  {piot_status}"
-    )
+    print(f"  Piotroski >= {th['piotroski_min']}:    {piot_val}  {piot_status}")
     if result.get("owner_earnings", 0) < 0 and "Negative Earnings" in failed:
         print("  Positive earnings:   N/A  FAIL (negative)")
     print()

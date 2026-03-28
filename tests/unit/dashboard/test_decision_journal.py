@@ -4,7 +4,7 @@ Unit tests for decision journal data loading.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 class TestLoadPredictions:
@@ -53,7 +53,9 @@ class TestLoadPredictions:
         with patch("dashboard.data.load_decisions", return_value=decisions):
             # Need to import after patching to avoid Streamlit import issues
             import importlib
+
             import dashboard.data
+
             importlib.reload(dashboard.data)
 
             # Call the underlying function logic directly

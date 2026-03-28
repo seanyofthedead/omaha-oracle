@@ -32,9 +32,7 @@ def render() -> None:
     # ── Sidebar filters ──
     unique_sectors = sorted({c.get("sector", "") for c in candidates if c.get("sector")})
 
-    selected_sectors = st.sidebar.multiselect(
-        "Sectors", unique_sectors, default=unique_sectors
-    )
+    selected_sectors = st.sidebar.multiselect("Sectors", unique_sectors, default=unique_sectors)
     min_mos = st.sidebar.slider("Min Margin of Safety %", 0, 100, 0)
     min_moat = st.sidebar.slider("Min Moat Score", 0, 10, 0)
 
@@ -214,9 +212,7 @@ def render() -> None:
     }
 
     # ── Tier 2: Primary content in tabs ──
-    tab_valuation, tab_quality, tab_compare = st.tabs(
-        ["Valuation", "Quality Scores", "Compare"]
-    )
+    tab_valuation, tab_quality, tab_compare = st.tabs(["Valuation", "Quality Scores", "Compare"])
 
     with tab_valuation:
         with st.container(border=True):
@@ -253,9 +249,7 @@ def _render_compare_tab(filtered: list[dict]) -> None:
     """Render the Compare tab with radar chart and side-by-side metrics."""
     ticker_list = [c.get("ticker", "") for c in filtered if c.get("ticker")]
 
-    selected = st.multiselect(
-        "Select tickers to compare (up to 4)", ticker_list, max_selections=4
-    )
+    selected = st.multiselect("Select tickers to compare (up to 4)", ticker_list, max_selections=4)
 
     if not selected:
         st.info("Select up to 4 tickers above to compare them side by side.")
