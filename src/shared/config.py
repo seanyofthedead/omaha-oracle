@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     table_config: str = Field(default="", alias="TABLE_CONFIG")
     table_watchlist: str = Field(default="", alias="TABLE_WATCHLIST")
     table_lessons: str = Field(default="", alias="TABLE_LESSONS")
+    table_web_candidates: str = Field(default="", alias="TABLE_WEB_CANDIDATES")
 
     # ------------------------------------------------------------------ #
     # S3                                                                   #
@@ -138,6 +139,11 @@ class Settings(BaseSettings):
     fred_api_key: str = Field(default="", alias="FRED_API_KEY")
 
     # ------------------------------------------------------------------ #
+    # Firecrawl                                                            #
+    # ------------------------------------------------------------------ #
+    firecrawl_api_key: str = Field(default="", alias="FIRECRAWL_API_KEY")
+
+    # ------------------------------------------------------------------ #
     # SEC EDGAR                                                            #
     # ------------------------------------------------------------------ #
     sec_user_agent: str = Field(default="", alias="SEC_USER_AGENT")
@@ -182,6 +188,7 @@ class Settings(BaseSettings):
             "table_config": f"omaha-oracle-{env}-config",
             "table_watchlist": f"omaha-oracle-{env}-watchlist",
             "table_lessons": f"omaha-oracle-{env}-lessons",
+            "table_web_candidates": f"omaha-oracle-{env}-web-candidates",
         }
         for attr, default in table_defaults.items():
             if not getattr(self, attr):
@@ -266,6 +273,21 @@ class Settings(BaseSettings):
             )
         return value
 
+    def get_firecrawl_key(self) -> str:
+        """Return the Firecrawl API key, falling back to SSM if not set."""
+        if self.firecrawl_api_key:
+            self._raise_if_prod_env_var(
+                "FIRECRAWL_API_KEY", self._ssm_path("firecrawl-api-key")
+            )
+            return self.firecrawl_api_key
+        value = _ssm_get(self._ssm_path("firecrawl-api-key"), self.aws_region)
+        if value is None:
+            raise RuntimeError(
+                "Firecrawl API key not found in environment or SSM "
+                f"({self._ssm_path('firecrawl-api-key')})"
+            )
+        return value
+
     def get_sec_user_agent(self) -> str:
         """Return the SEC EDGAR User-Agent string, falling back to SSM if not set.
 
@@ -312,6 +334,7 @@ class Settings(BaseSettings):
             self.table_config,
             self.table_watchlist,
             self.table_lessons,
+            self.table_web_candidates,
         ]
 
     def __repr__(self) -> str:
