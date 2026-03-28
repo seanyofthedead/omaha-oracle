@@ -28,6 +28,8 @@ class SearchConfig(BaseModel):
 
     num_results: int = Field(default=3, ge=1, le=10)
     time_limit_minutes: int = Field(default=15, ge=5, le=60)
+    include_web_sources: bool = Field(default=True)
+    re_evaluate: bool = Field(default=False)
 
 
 # ---------------------------------------------------------------------------

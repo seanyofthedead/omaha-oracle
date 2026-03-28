@@ -270,3 +270,119 @@ def load_pipeline_run_dates() -> list[str]:
         if date_part:
             dates.add(date_part)
     return sorted(dates, reverse=True)
+
+
+@st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
+def load_portfolio() -> dict[str, Any]:
+    """Load account summary and open positions from Alpaca.
+
+    Returns a dict with keys ``cash``, ``portfolio_value``, and
+    ``positions`` (list of dicts with ticker, shares, cost_basis,
+    market_value, sector fields).
+    """
+    from dashboard.alpaca_session import get_alpaca_client
+
+    try:
+        client = get_alpaca_client()
+        account = client.get_account()
+        positions = client.get_positions()
+    except Exception as exc:
+        _log.warning("load_portfolio failed", extra={"error": str(exc)})
+        raise DataLoadError(f"Could not load portfolio: {exc}") from exc
+
+    pos_list = []
+    for p in positions:
+        pos_list.append(
+            {
+                "ticker": p.symbol,
+                "shares": p.qty,
+                "cost_basis": p.cost_basis,
+                "market_value": p.market_value,
+                "sector": "",  # Alpaca doesn't provide sector; left for enrichment
+                "avg_entry_price": p.avg_entry_price,
+                "current_price": p.current_price,
+                "unrealized_pl": p.unrealized_pl,
+                "unrealized_plpc": p.unrealized_plpc,
+                "change_today": p.change_today,
+                "side": p.side,
+            }
+        )
+
+    return {
+        "cash": account.cash,
+        "portfolio_value": account.portfolio_value,
+        "equity": account.equity,
+        "buying_power": account.buying_power,
+        "positions": pos_list,
+    }
+
+
+@st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
+def load_portfolio_history() -> dict[str, Any]:
+    """Load decision history and SPY benchmark for performance comparison.
+
+    Returns a dict with ``dates``, ``spy_values``, ``buy_dates``,
+    ``sell_dates``, and ``metrics``.
+    """
+    try:
+        decisions = load_decisions(limit=500)
+    except DataLoadError:
+        return {"dates": [], "spy_values": [], "metrics": {}, "buy_dates": [], "sell_dates": []}
+
+    if not decisions:
+        return {"dates": [], "spy_values": [], "metrics": {}, "buy_dates": [], "sell_dates": []}
+
+    # Extract decision dates and types
+    buy_dates: list[str] = []
+    sell_dates: list[str] = []
+    all_dates: list[str] = []
+
+    for d in decisions:
+        ts = d.get("timestamp", "")
+        date_str = ts[:10] if len(ts) >= 10 else ts
+        if not date_str:
+            continue
+        all_dates.append(date_str)
+        action = (d.get("payload") or d).get("action", "").upper()
+        if action == "BUY":
+            buy_dates.append(date_str)
+        elif action == "SELL":
+            sell_dates.append(date_str)
+
+    if not all_dates:
+        return {"dates": [], "spy_values": [], "metrics": {}, "buy_dates": [], "sell_dates": []}
+
+    start_date = min(all_dates)
+
+    # Fetch SPY benchmark
+    spy_dates: list[str] = []
+    spy_values: list[float] = []
+    try:
+        import yfinance as yf
+
+        spy = yf.download("SPY", start=start_date, progress=False)
+        if not spy.empty:
+            closes = spy["Close"].dropna()
+            first_val = float(closes.iloc[0])
+            if first_val > 0:
+                spy_dates = [d.strftime("%Y-%m-%d") for d in closes.index]
+                spy_values = [float(v) / first_val * 100 for v in closes]
+    except Exception:
+        pass  # SPY data is best-effort
+
+    # Compute metrics
+    spy_return_pct = (spy_values[-1] - 100) if spy_values else 0.0
+    metrics = {
+        "spy_return_pct": spy_return_pct,
+        "total_decisions": len(decisions),
+        "total_buys": len(buy_dates),
+        "total_sells": len(sell_dates),
+    }
+
+    return {
+        "dates": spy_dates,
+        "spy_values": spy_values,
+        "buy_dates": buy_dates,
+        "sell_dates": sell_dates,
+        "metrics": metrics,
+    }

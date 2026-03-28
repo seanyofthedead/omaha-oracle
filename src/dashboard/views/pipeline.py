@@ -387,7 +387,7 @@ def _render_funnel(candidates: list[dict]) -> None:
         height=350,
         margin={"l": 10, "r": 10, "t": 10, "b": 10},
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def _render_candidates_table(candidates: list[dict], held: set[str], pending: set[str]) -> None:
@@ -441,7 +441,7 @@ def _render_candidates_table(candidates: list[dict], held: set[str], pending: se
         )
 
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True, height=500)
+    st.dataframe(df, width="stretch", hide_index=True, height=500)
 
     # ── Detail expanders for candidates with stage data ──────────────
     st.subheader("Candidate Details")
@@ -583,7 +583,7 @@ def _render_pipeline(candidates: list[dict], held: set[str], pending: set[str]) 
         )
 
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     # ── Radar chart comparator ───────────────────────────────────────
     tickers_with_data = [
@@ -637,7 +637,7 @@ def _render_pipeline(candidates: list[dict], held: set[str], pending: set[str]) 
                 polar={"radialaxis": {"visible": True, "range": [0, 10]}},
                 height=400,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
 
 def _render_watchlists() -> None:
@@ -703,7 +703,7 @@ def _render_watchlists() -> None:
                         else "\u2014",
                     }
                 )
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
             # Remove symbol
             sym_to_remove = st.selectbox(
@@ -813,6 +813,28 @@ def _render_search_config() -> None:
         "then full pipeline analysis (quant, moat, management, intrinsic value, thesis)."
     )
 
+    # Previously-evaluated ticker info
+    try:
+        from shared.evaluated_store import EvaluatedTickerStore
+
+        eval_store = EvaluatedTickerStore()
+        eval_count = eval_store.get_evaluation_count()
+    except Exception:
+        eval_count = 0
+
+    if eval_count > 0:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.info(
+                f"Skipping **{eval_count}** previously evaluated companies "
+                f"(auto-reset after 90 days)."
+            )
+        with col2:
+            if st.button("Reset List", help="Clear the evaluated list to re-scan all companies"):
+                eval_store.clear_all()
+                st.success("Evaluated list cleared.")
+                st.rerun()
+
     # LLM budget pre-check
     budget_warning = _check_llm_budget()
     if budget_warning == "exhausted":
@@ -839,14 +861,33 @@ def _render_search_config() -> None:
             value=15,
             help="Maximum search duration. Longer allows more candidates to be evaluated.",
         )
+        include_web = st.checkbox(
+            "Include web-sourced candidates",
+            value=True,
+            help=(
+                "Merge tickers from Firecrawl-scraped sources "
+                "(Finviz, SEC filings, insider feeds, analyst upgrades, etc.) "
+                "into the candidate pool alongside Yahoo Finance screener results."
+            ),
+        )
+        re_evaluate = st.checkbox(
+            "Include previously evaluated tickers",
+            value=False,
+            help="Re-scan companies evaluated in the last 90 days instead of skipping them.",
+        )
         submitted = st.form_submit_button(
             "Start Search",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
 
     if submitted:
-        config = SearchConfig(num_results=num_results, time_limit_minutes=time_limit)
+        config = SearchConfig(
+            num_results=num_results,
+            time_limit_minutes=time_limit,
+            include_web_sources=include_web,
+            re_evaluate=re_evaluate,
+        )
         progress = ThreadSafeProgress()
         cancel_event = threading.Event()
 
@@ -901,16 +942,20 @@ def _render_search_progress() -> None:
         st_autorefresh(interval=2000, key="ps_autorefresh")
 
     # Hero metrics
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
+    web_count = snap.get("web_candidate_count", 0)
+    cols = st.columns(5 if web_count else 4)
+    with cols[0]:
         st.metric("Evaluated", snap.get("evaluated_count", 0))
-    with c2:
+    with cols[1]:
         st.metric("Matches", snap.get("match_count", 0))
-    with c3:
+    with cols[2]:
         elapsed = snap.get("elapsed_seconds", 0)
         st.metric("Elapsed", f"{elapsed / 60:.1f} min")
-    with c4:
-        st.metric("Pre-screened", snap.get("screener_count", 0))
+    with cols[3]:
+        st.metric("Screener", snap.get("screener_count", 0))
+    if web_count:
+        with cols[4]:
+            st.metric("Web Sources", web_count)
 
     # Status
     action = snap.get("current_action", "")
@@ -1034,7 +1079,7 @@ def _render_results_table(results: list) -> None:
             }
         )
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
 
 def _check_llm_budget() -> str | None:

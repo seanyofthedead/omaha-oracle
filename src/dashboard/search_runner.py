@@ -241,7 +241,10 @@ def run_search(
 
     # --- Load previously evaluated tickers ---
     eval_store = EvaluatedTickerStore()
-    previously_evaluated = eval_store.get_evaluated_tickers()
+    previously_evaluated = (
+        set() if getattr(config, "re_evaluate", False)
+        else eval_store.get_evaluated_tickers()
+    )
     search_id = f"search-{int(time.time())}"
 
     # --- Tier 1 + 2: screener + ranking ---
@@ -260,14 +263,21 @@ def run_search(
     generator = SmartCandidateGenerator(
         evaluated=previously_evaluated,
         max_screener_results=SCREENER_MAX_RESULTS,
+        include_web_sources=getattr(config, "include_web_sources", True),
     )
 
     # Trigger initialization (Tier 1 + 2) so we can report the count
     generator.generate_batch(0)
+    web_count = generator.web_candidate_count
+    if web_count:
+        action = f"Ranked {generator.screener_count} screener + {web_count} web candidates"
+    else:
+        action = f"Ranked {generator.screener_count} pre-screened candidates"
     progress.update(
         {
-            "current_action": f"Ranked {generator.screener_count} pre-screened candidates",
+            "current_action": action,
             "screener_count": generator.screener_count,
+            "web_candidate_count": web_count,
             "elapsed_seconds": time.monotonic() - start_time,
         }
     )

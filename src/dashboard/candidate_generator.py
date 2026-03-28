@@ -33,6 +33,22 @@ _universe_cache: dict[str, str] | None = None
 
 MIN_MARKET_CAP = 1_000_000_000  # $1B
 
+
+def _fetch_web_candidates() -> list[dict[str, Any]]:
+    """Fetch web-sourced candidates from DynamoDB and convert to screener dicts.
+
+    Returns an empty list if the web candidates table doesn't exist or is empty.
+    """
+    try:
+        from ingestion.web_sources.storage import WebCandidateStore
+
+        store = WebCandidateStore()
+        candidates = store.get_top_candidates(limit=500, min_score=0.3)
+        return [c.to_screener_dict() for c in candidates]
+    except Exception:
+        _log.debug("Web candidates not available (table may not exist yet)")
+        return []
+
 # ---------------------------------------------------------------------------
 # Tier 1: EquityQuery bulk filter
 # ---------------------------------------------------------------------------
@@ -227,7 +243,8 @@ def rank_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 class SmartCandidateGenerator:
-    """Generates ranked ticker candidates using the Yahoo Finance screener.
+    """Generates ranked ticker candidates using the Yahoo Finance screener
+    and optionally web-sourced candidates from Firecrawl scraping.
 
     On first call to ``generate_batch``, runs Tier 1 (screener) and Tier 2 (scoring)
     to build a pre-ranked candidate list. Subsequent calls return the next batch
@@ -238,12 +255,15 @@ class SmartCandidateGenerator:
         self,
         evaluated: set[str] | None = None,
         max_screener_results: int = 500,
+        include_web_sources: bool = True,
     ) -> None:
         self._evaluated = evaluated or set()
         self._max_screener_results = max_screener_results
+        self._include_web_sources = include_web_sources
         self._ranked: list[dict[str, Any]] | None = None
         self._index = 0
         self.screener_count = 0  # Number of Tier 1 results (for progress display)
+        self.web_candidate_count = 0  # Number of web-sourced candidates merged
 
     def _initialize(self) -> None:
         """Run Tier 1 + Tier 2 to build the ranked candidate list."""
@@ -263,8 +283,22 @@ class SmartCandidateGenerator:
                 _log.warning("Fallback screener also failed")
                 raw = []
 
-        # Filter out already-evaluated tickers
-        filtered = [c for c in raw if c.get("symbol") and c["symbol"] not in self._evaluated]
+        # Merge web-sourced candidates from DynamoDB
+        if self._include_web_sources:
+            web_dicts = _fetch_web_candidates()
+            self.web_candidate_count = len(web_dicts)
+            if web_dicts:
+                _log.info("Merging %d web-sourced candidates", len(web_dicts))
+                raw.extend(web_dicts)
+
+        # Filter out already-evaluated tickers and deduplicate
+        seen: set[str] = set()
+        filtered: list[dict[str, Any]] = []
+        for c in raw:
+            sym = c.get("symbol")
+            if sym and sym not in self._evaluated and sym not in seen:
+                seen.add(sym)
+                filtered.append(c)
 
         _log.info("Ranking %d candidates (Tier 2)", len(filtered))
         self._ranked = rank_candidates(filtered)
