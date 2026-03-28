@@ -1,0 +1,207 @@
+=====================================================
+  SHARING THE OMAHA ORACLE DASHBOARD WITH SOMEONE
+=====================================================
+
+This guide walks you through sharing your dashboard
+with someone else (a friend, family member, etc.)
+so they can view it in their web browser — no
+software installation required on their end.
+
+They just click a link. That's it.
+
+
+-----------------------------------------------------
+WHAT'S HAPPENING (PLAIN ENGLISH)
+-----------------------------------------------------
+
+Right now, when you run the dashboard, it only works
+on YOUR computer at http://localhost:8501.
+
+"localhost" means "this computer only" — nobody else
+can reach it.
+
+We're going to use a free tool called Cloudflare
+Tunnel to create a temporary public web address
+(like https://abc123.trycloudflare.com) that forwards
+to your local dashboard. When your friend opens that
+link, they see your dashboard as if it were a real
+website.
+
+When you close the tunnel, the link stops working.
+Your friend can never access it again unless you
+start a new tunnel and send them the new link.
+
+
+-----------------------------------------------------
+ONE-TIME SETUP (DO THIS ONCE)
+-----------------------------------------------------
+
+STEP 1: Install Cloudflare Tunnel
+
+   Open a terminal (PowerShell or Command Prompt):
+   - Press the Windows key
+   - Type "PowerShell"
+   - Click "Windows PowerShell"
+
+   Then paste this command and press Enter:
+
+       winget install Cloudflare.cloudflared
+
+   Wait for it to finish. You'll see a success
+   message when it's done.
+
+   If "winget" doesn't work, download the installer
+   directly from:
+   https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+
+   Pick the Windows 64-bit .msi file, double-click
+   it, and follow the prompts.
+
+STEP 2: Verify it installed
+
+   In the same terminal, type:
+
+       cloudflared --version
+
+   You should see a version number. If you get an
+   error, close the terminal, open a NEW one, and
+   try again (the terminal needs to refresh its
+   list of available programs).
+
+
+-----------------------------------------------------
+EVERY TIME YOU WANT TO SHARE
+-----------------------------------------------------
+
+You need TWO terminal windows open at the same time.
+One runs the dashboard, the other runs the tunnel.
+
+STEP 1: Start the dashboard
+
+   Open a terminal and navigate to the project:
+
+       cd C:\Users\peder\Documents\omaha_oracle
+
+   Then start the dashboard:
+
+       python run_dashboard.py
+
+   Wait until you see the line that says:
+
+       Local URL: http://localhost:8501
+
+   That means the dashboard is running. DO NOT close
+   this terminal window — leave it running.
+
+STEP 2: Start the tunnel
+
+   Open a SECOND terminal window (leave the first
+   one running). Paste this command:
+
+       cloudflared tunnel --url http://localhost:8501
+
+   After a few seconds you'll see output that
+   includes a line like:
+
+       https://something-random-words.trycloudflare.com
+
+   That is your shareable link.
+
+STEP 3: Send the link to your friend
+
+   Copy that https://...trycloudflare.com link and
+   send it to your friend via text, email, whatever.
+
+   They open it in any web browser (Chrome, Safari,
+   Edge, Firefox — anything) on any device (phone,
+   tablet, laptop).
+
+   They will see the dashboard login screen. Give
+   them the dashboard password so they can log in.
+
+STEP 4: When you're done sharing
+
+   Go to the SECOND terminal (the tunnel one) and
+   press Ctrl+C to stop it. The link immediately
+   stops working.
+
+   Then go to the FIRST terminal (the dashboard one)
+   and press Ctrl+C to stop the dashboard too.
+
+   You can close both terminal windows.
+
+
+-----------------------------------------------------
+IMPORTANT NOTES
+-----------------------------------------------------
+
+- The link changes every time. Each time you run
+  the "cloudflared tunnel" command, you get a new
+  random link. You'll need to send the new link to
+  your friend each time.
+
+- Your computer must stay on. The dashboard and
+  tunnel run on YOUR machine. If your computer
+  sleeps, shuts down, or loses internet, the link
+  stops working.
+
+- It's temporary and private. Cloudflare generates
+  a random hard-to-guess URL. Nobody will stumble
+  on it by accident. Plus the dashboard has password
+  protection. When you stop the tunnel, it's gone.
+
+- Performance depends on your internet. Your friend's
+  experience depends on your upload speed. On most
+  home connections this is perfectly fine.
+
+- The dashboard password is stored in:
+  .streamlit/secrets.toml
+  Make sure it's set before sharing. If your friend
+  needs the password, tell them directly — don't
+  put it in the link.
+
+
+-----------------------------------------------------
+TROUBLESHOOTING
+-----------------------------------------------------
+
+PROBLEM: "cloudflared" is not recognized
+FIX:     Close ALL terminal windows and open a fresh
+         one. If still broken, reinstall using the
+         .msi installer from the Cloudflare website.
+
+PROBLEM: The link loads but shows an error page
+FIX:     Make sure the dashboard is actually running
+         in the first terminal. You should see
+         "Local URL: http://localhost:8501" there.
+
+PROBLEM: Friend says the page is slow or won't load
+FIX:     Check your internet connection. Try opening
+         the tunnel link yourself first to confirm
+         it works on your end.
+
+PROBLEM: Friend sees "This site can't be reached"
+FIX:     The tunnel probably stopped. Check the
+         second terminal — if it closed or shows an
+         error, restart it with the cloudflared
+         command again and send the NEW link.
+
+PROBLEM: Dashboard crashes or shows a Python error
+FIX:     Stop both terminals (Ctrl+C in each), then
+         start over from Step 1.
+
+
+-----------------------------------------------------
+QUICK REFERENCE (CHEAT SHEET)
+-----------------------------------------------------
+
+Terminal 1:
+    cd C:\Users\peder\Documents\omaha_oracle
+    python run_dashboard.py
+
+Terminal 2:
+    cloudflared tunnel --url http://localhost:8501
+
+Copy the https://...trycloudflare.com link.
+Send it to your friend.
+Ctrl+C in both terminals when done.

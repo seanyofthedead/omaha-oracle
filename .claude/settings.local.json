@@ -34,7 +34,28 @@
       "Bash(set +a)",
       "Bash(git push:*)",
       "Bash(git rebase:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(command git:*)",
+      "Bash(sed 's/.*--> //')",
+      "Bash(command gh:*)",
+      "Bash(mkdir -p /c/Users/peder/.claude/plans)",
+      "Read(//c/Users/peder/.claude/plans//**)",
+      "Bash(python3:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git pull:*)",
+      "Bash(tee /tmp/mypy_out.txt)",
+      "Bash(ENVIRONMENT=dev MONTHLY_LLM_BUDGET_USD=100.0 AWS_ACCESS_KEY_ID=testing AWS_SECRET_ACCESS_KEY=testing AWS_DEFAULT_REGION=us-east-1 pytest tests/unit/ -x -q)",
+      "Bash(export ENVIRONMENT=dev MONTHLY_LLM_BUDGET_USD=100.0 AWS_ACCESS_KEY_ID=testing AWS_SECRET_ACCESS_KEY=testing AWS_DEFAULT_REGION=us-east-1)",
+      "Bash(for mod:*)",
+      "Bash(do echo:*)",
+      "Bash(done)",
+      "Read(//c/Users/peder/Documents/omaha_oracle/infra/**)",
+      "Bash(npx cdk:*)",
+      "Read(//mnt/**)",
+      "Bash(ls /mnt/)",
+      "Bash(mkdir -p \"C:/Users/peder/Documents/omaha_oracle/.claude/skills\")",
+      "Bash(mv \"C:/Users/peder/Documents/omaha_oracle/git-guardian\" \"C:/Users/peder/Documents/omaha_oracle/.claude/skills/git-guardian\")"
     ]
   }
 }

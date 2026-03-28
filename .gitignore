@@ -32,3 +32,6 @@ infra\layer/
 
 # Streamlit secrets (contains dashboard password — never commit)
 .streamlit/secrets.toml
+
+# Temporary debug files
+work-tmp/
