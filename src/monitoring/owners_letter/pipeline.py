@@ -183,7 +183,7 @@ def extract_lessons(
         extracted.append(item)
 
     if extracted:
-        failed: list[dict] = []
+        failed: list[dict[str, Any]] = []
         for lesson_item in extracted:
             try:
                 lessons_client._db.put_item(lesson_item)

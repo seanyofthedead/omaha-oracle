@@ -10,9 +10,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.alpaca_errors import handle_alpaca_error
-from dashboard.alpaca_models import PortfolioHistory
 from dashboard.alpaca_session import get_alpaca_client
-from dashboard.analytics import prepare_equity_chart_data
+from dashboard.analytics import PortfolioHistory, prepare_equity_chart_data
 from dashboard.charts import ACCENT_BLUE, get_chart_template
 from dashboard.fmt import fmt_currency, fmt_currency_short, fmt_delta_currency
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -34,7 +35,7 @@ def generate_gbm_prices(
     return prices
 
 
-def _discretize(obs: np.ndarray, bins: int = N_BINS) -> tuple:
+def _discretize(obs: np.ndarray, bins: int = N_BINS) -> tuple[int, ...]:
     """Convert continuous observation to discrete bin indices."""
     clipped = np.clip(obs, -2, 2)
     indices = np.floor((clipped + 2) / 4 * bins).astype(int)
@@ -46,7 +47,7 @@ def train(
     n_episodes: int = N_EPISODES,
     save_path: str | None = None,
     verbose: bool = True,
-) -> dict:
+) -> dict[str, Any]:
     """Train a Q-learning agent on synthetic price data.
 
     Returns a dict with training_log and final_q_table_size.
@@ -55,9 +56,9 @@ def train(
     prices = generate_gbm_prices(rng=rng)
     env = TradingEnv(prices, initial_capital=100_000.0)
 
-    q_table: dict[tuple, np.ndarray] = {}
+    q_table: dict[tuple[int, ...], np.ndarray] = {}
     epsilon = EPSILON_START
-    training_log: list[dict] = []
+    training_log: list[dict[str, Any]] = []
 
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=SEED + ep)
@@ -91,7 +92,7 @@ def train(
                 break
 
         epsilon = max(EPSILON_END, epsilon * EPSILON_DECAY)
-        pv = info.get("portfolio_value", 0)
+        pv = float(info.get("portfolio_value", 0))  # type: ignore[arg-type]
 
         entry = {
             "episode": ep,

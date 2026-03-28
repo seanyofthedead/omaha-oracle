@@ -10,7 +10,7 @@ from __future__ import annotations
 def build_vertical_spread_legs(
     long_symbol: str,
     short_symbol: str,
-) -> list[dict]:
+) -> list[dict[str, str | int]]:
     """Build legs for a vertical spread (bull call or bear put)."""
     return [
         {"symbol": long_symbol, "ratio_qty": 1, "side": "buy"},
@@ -21,7 +21,7 @@ def build_vertical_spread_legs(
 def build_straddle_legs(
     call_symbol: str,
     put_symbol: str,
-) -> list[dict]:
+) -> list[dict[str, str | int]]:
     """Build legs for a long straddle (buy call + buy put at same strike)."""
     return [
         {"symbol": call_symbol, "ratio_qty": 1, "side": "buy"},
@@ -32,7 +32,7 @@ def build_straddle_legs(
 def build_strangle_legs(
     call_symbol: str,
     put_symbol: str,
-) -> list[dict]:
+) -> list[dict[str, str | int]]:
     """Build legs for a long strangle (buy OTM call + buy OTM put)."""
     return [
         {"symbol": call_symbol, "ratio_qty": 1, "side": "buy"},

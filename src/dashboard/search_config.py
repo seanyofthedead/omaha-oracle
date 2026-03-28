@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
@@ -33,7 +35,7 @@ class SearchConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def check_quality_gates(result: dict) -> tuple[bool, dict[str, bool]]:
+def check_quality_gates(result: dict[str, Any]) -> tuple[bool, dict[str, bool]]:
     """Check whether a pipeline result passes all quality gates.
 
     Returns (all_passed, {"moat": bool, "management": bool, "mos": bool}).

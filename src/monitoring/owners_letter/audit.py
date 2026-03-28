@@ -115,7 +115,7 @@ def run_outcome_audit(
     unique_tickers = list(ticker_ts_map.keys())
 
     # Batch-fetch current prices for all tickers in one yfinance call
-    current_cache: dict[str, float] = {}
+    current_cache: dict[str, float | None] = {}
     if unique_tickers:
         try:
             import pandas as pd
@@ -138,8 +138,8 @@ def run_outcome_audit(
                 "Batch price fetch failed, will fall back per-ticker", extra={"error": str(exc)}
             )
 
-    # Cache for historical prices: (ticker, date_str) -> float
-    hist_cache: dict[tuple[str, str], float] = {}
+    # Cache for historical prices: (ticker, date_str) -> float | None
+    hist_cache: dict[tuple[str, str], float | None] = {}
 
     audits: list[dict[str, Any]] = []
     sector_mistakes: dict[str, int] = {}
@@ -166,7 +166,7 @@ def run_outcome_audit(
             or payload.get("limit_price")
             or payload.get("current_price")
         )
-        if price_at <= 0:
+        if price_at is None or price_at <= 0:
             cache_key = (ticker, ts.date().isoformat())
             if cache_key not in hist_cache:
                 hist_cache[cache_key] = _fetch_price(ticker, ts)

@@ -73,7 +73,7 @@ def rename_watchlist(client: AlpacaClient, watchlist_id: str, new_name: str) -> 
         if wl.name == new_name and wl.watchlist_id != watchlist_id:
             raise ValueError(f"A watchlist named '{new_name}' already exists.")
 
-    return client.update_watchlist(watchlist_id, new_name)
+    return client.update_watchlist(watchlist_id, new_name)  # type: ignore[attr-defined, no-any-return]
 
 
 # ── Quote fetching with TTL cache ────────────────────────────────────────

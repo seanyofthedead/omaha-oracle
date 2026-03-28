@@ -78,7 +78,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         }
 
         guard_result = check_all_guardrails(
-            proposed, portfolio_state, budget_status, pending_decisions=approved_buys
+            proposed, portfolio_state, dict(budget_status), pending_decisions=approved_buys
         )
 
         # Analysis consistency (BUY only)

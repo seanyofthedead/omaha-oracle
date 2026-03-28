@@ -76,11 +76,11 @@ def run_backtest(
 
     # Simulate portfolio
     cash = initial_capital
-    positions: dict[str, dict] = {}  # ticker -> {shares, entry_price}
-    portfolio_values = []
-    trades = []
+    positions: dict[str, dict[str, float]] = {}  # ticker -> {shares, entry_price}
+    portfolio_values: list[float] = []
+    trades: list[dict[str, Any]] = []
 
-    decision_map: dict[str, list] = {}
+    decision_map: dict[str, list[dict[str, Any]]] = {}
     for d in trade_decisions:
         date_key = d["timestamp"][:10]
         decision_map.setdefault(date_key, []).append(d)
@@ -156,22 +156,23 @@ def run_backtest(
 
         # Max drawdown
         peak = portfolio_values[0]
-        max_dd = 0
+        max_dd = 0.0
         for v in portfolio_values:
             peak = max(peak, v)
             dd = (peak - v) / peak * 100
             max_dd = max(max_dd, dd)
 
         # Win rate from trades
-        completed_trades = {}
-        for t in trades:
-            ticker = t["ticker"]
-            if t["signal"] == "BUY":
-                completed_trades[ticker] = t["price"]
-            elif t["signal"] == "SELL" and ticker in completed_trades:
-                completed_trades[ticker] = t["price"] - completed_trades[ticker]
+        entry_prices: dict[str, float] = {}
+        trade_pnl: dict[str, float] = {}
+        for trade in trades:
+            t_ticker: str = trade["ticker"]
+            if trade["signal"] == "BUY":
+                entry_prices[t_ticker] = float(trade["price"])
+            elif trade["signal"] == "SELL" and t_ticker in entry_prices:
+                trade_pnl[t_ticker] = float(trade["price"]) - entry_prices[t_ticker]
 
-        wins = sum(1 for v in completed_trades.values() if v > 0)
+        wins = sum(1 for v in trade_pnl.values() if v > 0)
         total_closed = len([t for t in trades if t["signal"] == "SELL"])
         win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
 
@@ -212,7 +213,7 @@ def run_backtest(
 
 def _compute_enhanced_metrics(
     portfolio_values: list[float],
-    trades: list[dict],
+    trades: list[dict[str, Any]],
     max_dd: float,
 ) -> tuple[float, float, float, float]:
     """Compute Sharpe, Sortino, Calmar ratios and avg trade return.

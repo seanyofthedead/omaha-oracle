@@ -60,7 +60,7 @@ class SearchResult:
     gate_details: dict[str, bool]
     gates_passed_count: int
     error: str | None
-    raw_result: dict
+    raw_result: dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ def _run_pipeline_stages(
     Does NOT run thesis (stage 5) — that's handled separately for qualifiers.
     """
     # Stage 1: Quant screen
-    thresholds = {}  # Use defaults from screener
+    thresholds: dict[str, float] = {}  # Use defaults from screener
     try:
         quant_result, quant_passed = screen_company(
             ticker, company_data, financials_client, thresholds

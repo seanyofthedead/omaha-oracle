@@ -75,7 +75,8 @@ def _default_get_filing_context() -> Callable[..., tuple[str, bool]]:
     from shared.s3_client import S3Client
 
     client = S3Client()
-    return client.get_filing_context
+    fn: Callable[..., tuple[str, bool]] = client.get_filing_context
+    return fn
 
 
 def _make_filing_context_override(

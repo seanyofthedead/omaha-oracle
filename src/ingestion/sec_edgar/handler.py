@@ -71,7 +71,8 @@ def _fetch_json(url: str, headers: dict[str, str]) -> dict[str, Any]:
     _rate_limit()
     resp = get_session().get(url, headers=headers, timeout=TIMEOUT)
     resp.raise_for_status()
-    return resp.json()
+    result: dict[str, Any] = resp.json()
+    return result
 
 
 def _get_ticker_to_cik(user_agent: str) -> dict[str, str]:

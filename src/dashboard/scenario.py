@@ -80,7 +80,7 @@ def simulate_position_add(
         else 0
     )
     max_sector_name = (
-        max(sector_after, key=sector_after.get, default="N/A") if sector_after else "N/A"
+        max(sector_after, key=lambda k: sector_after[k], default="N/A") if sector_after else "N/A"
     )
 
     # Check violations

@@ -46,7 +46,8 @@ class AlpacaClient:
             timeout=TIMEOUT,
         )
         resp.raise_for_status()
-        return resp.json()
+        result: dict[str, Any] = resp.json()
+        return result
 
     def submit_order(
         self,
@@ -96,7 +97,8 @@ class AlpacaClient:
             timeout=TIMEOUT,
         )
         resp.raise_for_status()
-        return resp.json()
+        result: dict[str, Any] = resp.json()
+        return result
 
     def get_positions(self) -> list[dict[str, Any]]:
         """Return current positions."""
@@ -106,7 +108,8 @@ class AlpacaClient:
             timeout=TIMEOUT,
         )
         resp.raise_for_status()
-        return resp.json()
+        result: list[dict[str, Any]] = resp.json()
+        return result
 
     def get_quote(self, ticker: str) -> dict[str, Any]:
         """Return latest quote (bid/ask) from market data API."""
@@ -116,4 +119,5 @@ class AlpacaClient:
             timeout=TIMEOUT,
         )
         resp.raise_for_status()
-        return resp.json()
+        result: dict[str, Any] = resp.json()
+        return result

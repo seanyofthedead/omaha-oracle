@@ -75,14 +75,14 @@ def compute_health_score(portfolio: dict[str, Any]) -> dict[str, Any]:
         violations = sum(1 for p in position_pcts if p > 15)
 
         if violations > 0:
-            sizing_score = max(0, 15 - violations * 5)
+            sizing_score = max(0.0, 15 - violations * 5)
         elif max_pos_pct <= 15:
             sizing_score = 20 + (15 - max_pos_pct) / 15 * 5
         else:
-            sizing_score = 15
-        sizing_score = min(25, sizing_score)
+            sizing_score = 15.0
+        sizing_score = min(25.0, sizing_score)
     else:
-        sizing_score = 0
+        sizing_score = 0.0
 
     # 4. Activity Score (0-25)
     num_positions = len(positions)

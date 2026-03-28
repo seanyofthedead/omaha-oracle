@@ -19,6 +19,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 import pandas as pd
 
@@ -122,7 +123,7 @@ def compute_all_metrics(pnl_list: list[float], equity_curve: list[float]) -> dic
 # ── Trade journal builder ───────────────────────────────────────────────
 
 
-def build_journal_entries(filled_orders: list[OrderInfo]) -> list[dict]:
+def build_journal_entries(filled_orders: list[OrderInfo]) -> list[dict[str, Any]]:
     """Build closed-trade journal entries from a list of filled orders.
 
     Pairs buy → sell (or sell → buy for shorts) per symbol using FIFO.
@@ -140,7 +141,7 @@ def build_journal_entries(filled_orders: list[OrderInfo]) -> list[dict]:
 
     # FIFO matching per symbol
     open_legs: dict[str, list[OrderInfo]] = {}
-    entries: list[dict] = []
+    entries: list[dict[str, Any]] = []
 
     for order in usable:
         sym = order.symbol
@@ -151,6 +152,9 @@ def build_journal_entries(filled_orders: list[OrderInfo]) -> list[dict]:
         if open_legs[sym] and open_legs[sym][0].side != order.side:
             opener = open_legs[sym].pop(0)
             qty = min(opener.qty, order.qty)
+            # Both filtered for non-None filled_avg_price above
+            assert opener.filled_avg_price is not None
+            assert order.filled_avg_price is not None
 
             if opener.side == "buy":
                 pnl = (order.filled_avg_price - opener.filled_avg_price) * qty

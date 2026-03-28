@@ -22,7 +22,7 @@ from botocore.exceptions import (
     NoCredentialsError,
 )
 
-from shared.analysis_client import merge_latest_analysis, merge_latest_analysis_with_stages
+from shared.analysis_client import merge_latest_analysis
 from shared.config import get_config
 from shared.dynamo_client import DynamoClient
 from shared.logger import get_logger
@@ -246,7 +246,7 @@ def load_all_pipeline_candidates(analysis_date: str | None = None) -> list[dict[
 
     candidates = []
     for ticker, items in sorted(by_ticker.items()):
-        merged = merge_latest_analysis_with_stages(items, ticker)
+        merged = merge_latest_analysis(items, ticker)
         if merged:
             candidates.append(merged)
     return candidates

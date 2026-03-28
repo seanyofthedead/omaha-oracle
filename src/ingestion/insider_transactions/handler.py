@@ -48,7 +48,8 @@ def _fetch(url: str, headers: dict[str, str]) -> requests.Response:
 
 
 def _fetch_json(url: str, headers: dict[str, str]) -> dict[str, Any]:
-    return _fetch(url, headers).json()
+    result: dict[str, Any] = _fetch(url, headers).json()
+    return result
 
 
 def _get_ticker_to_cik(user_agent: str) -> dict[str, str]:

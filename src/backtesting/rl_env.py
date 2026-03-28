@@ -45,9 +45,11 @@ class TradingEnv(gym.Env):
         self.shares = 0.0
         self.entry_price = 0.0
         self.portfolio_values: list[float] = []
-        self.trades: list[dict] = []
+        self.trades: list[dict[str, object]] = []
 
-    def reset(self, seed=None, options=None):
+    def reset(
+        self, seed: int | None = None, options: dict[str, object] | None = None,
+    ) -> tuple[np.ndarray, dict[str, object]]:
         super().reset(seed=seed)
         self.current_step = 20  # need lookback for price changes
         self.cash = self.initial_capital
@@ -79,7 +81,7 @@ class TradingEnv(gym.Env):
             obs = np.concatenate([obs, self.features[self.current_step].astype(np.float32)])
         return obs
 
-    def step(self, action):
+    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict[str, object]]:
         price = self.prices[self.current_step]
         pv_before = self.cash + self.shares * price
         reward = 0.0

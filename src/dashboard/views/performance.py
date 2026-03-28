@@ -10,9 +10,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.alpaca_errors import handle_alpaca_error
-from dashboard.alpaca_models import PortfolioHistory
 from dashboard.alpaca_session import get_alpaca_client
 from dashboard.analytics import (
+    PortfolioHistory,
     build_journal_entries,
     compute_all_metrics,
     prepare_equity_chart_data,

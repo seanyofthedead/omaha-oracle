@@ -36,7 +36,8 @@ def _ssm_get(path: str, region: str) -> str | None:
     try:
         client = boto3.client("ssm", region_name=region, config=_SSM_CONFIG)
         resp = client.get_parameter(Name=path, WithDecryption=True)
-        return resp["Parameter"]["Value"]
+        result: str | None = resp["Parameter"]["Value"]
+        return result
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
         if code != "ParameterNotFound":

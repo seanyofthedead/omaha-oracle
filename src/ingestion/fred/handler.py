@@ -47,8 +47,8 @@ def _fetch_series(series_id: str, api_key: str) -> list[dict[str, Any]]:
     }
     resp = get_session().get(FRED_BASE, params=params, timeout=TIMEOUT)
     resp.raise_for_status()
-    data = resp.json()
-    observations = data.get("observations", [])
+    data: dict[str, Any] = resp.json()
+    observations: list[dict[str, Any]] = data.get("observations", [])
     return observations
 
 
