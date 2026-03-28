@@ -104,7 +104,7 @@ def _render_performance_chart(client: AlpacaClient) -> list[float]:
         xaxis_title="",
         height=380,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     return history.equity
 
 
@@ -186,7 +186,7 @@ def _render_trade_journal(client: AlpacaClient) -> list[float]:
         return ""
 
     styled = df.style.applymap(_color_pnl, subset=["pnl"] if "pnl" in df.columns else [])
-    st.dataframe(styled, use_container_width=True, hide_index=True)
+    st.dataframe(styled, width="stretch", hide_index=True)
 
     # Editable notes per entry
     with st.expander("Edit trade notes"):

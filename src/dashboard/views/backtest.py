@@ -162,7 +162,7 @@ def render() -> None:
             height=500,
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with tab_trades:
         if result["trades"]:
@@ -170,6 +170,6 @@ def render() -> None:
 
             trades_df = pd.DataFrame(result["trades"])
             trades_df.columns = ["Date", "Ticker", "Signal", "Price", "Shares"]
-            st.dataframe(trades_df, use_container_width=True, hide_index=True)
+            st.dataframe(trades_df, width="stretch", hide_index=True)
         else:
             st.info("No trades executed in this period.")

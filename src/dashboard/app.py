@@ -140,7 +140,7 @@ def _require_auth() -> None:
                     key="login_pwd",
                     placeholder="Enter dashboard password",
                 )
-                submitted = st.form_submit_button("Login", use_container_width=True)
+                submitted = st.form_submit_button("Login", width="stretch")
             if submitted:
                 # Rate limiting: track failed attempts within a 60-second window
                 if "login_attempts" not in st.session_state:

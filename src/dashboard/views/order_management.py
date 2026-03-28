@@ -115,7 +115,7 @@ def _render_order_form() -> None:
         if order_type in ("stop", "stop_limit"):
             stop_price = st.text_input("Stop Price", placeholder="Required for stop/stop-limit")
 
-        submitted = st.form_submit_button("Review Order", use_container_width=True)
+        submitted = st.form_submit_button("Review Order", width="stretch")
 
     if submitted:
         errors = validate_order_params(
@@ -164,7 +164,7 @@ def _render_confirmation(client) -> None:
 
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
-        if st.button("Submit Order", type="primary", use_container_width=True):
+        if st.button("Submit Order", type="primary", width="stretch"):
             ok, result = submit_order_safe(
                 client,
                 symbol=order["symbol"],
@@ -186,7 +186,7 @@ def _render_confirmation(client) -> None:
             else:
                 st.error(result)
     with col_cancel:
-        if st.button("Cancel", use_container_width=True):
+        if st.button("Cancel", width="stretch"):
             st.session_state.pending_order = None
             st.rerun()
 
@@ -218,7 +218,7 @@ def render() -> None:
             order_objects = [OrderInfo(**{k: v for k, v in o.items()}) for o in open_orders]
             rows = [format_order_row(o) for o in order_objects]
             df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
 
             # Cancel buttons
             st.subheader("Cancel Orders")
@@ -253,4 +253,4 @@ def render() -> None:
             order_objects = [OrderInfo(**{k: v for k, v in o.items()}) for o in recent]
             rows = [format_order_row(o) for o in order_objects]
             df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)

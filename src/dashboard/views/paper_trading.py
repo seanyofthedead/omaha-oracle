@@ -88,14 +88,14 @@ def _render_watchlists(client: AlpacaClient) -> None:
     col_create, col_rename, col_delete = st.columns(3)
 
     with col_create:
-        with st.popover("New Watchlist", use_container_width=True):
+        with st.popover("New Watchlist", width="stretch"):
             new_name = st.text_input("Name", key="wl_new_name", placeholder="e.g. Tech Stocks")
             new_symbols = st.text_input(
                 "Initial symbols (optional)",
                 key="wl_new_symbols",
                 placeholder="AAPL, MSFT, GOOG",
             )
-            if st.button("Create", key="wl_create_btn", use_container_width=True):
+            if st.button("Create", key="wl_create_btn", width="stretch"):
                 if not new_name or not new_name.strip():
                     st.error("Name is required.")
                 else:
@@ -114,7 +114,7 @@ def _render_watchlists(client: AlpacaClient) -> None:
                         handle_alpaca_error(exc)
 
     with col_rename:
-        with st.popover("Rename", use_container_width=True):
+        with st.popover("Rename", width="stretch"):
             if not watchlists:
                 st.info("No watchlists to rename.")
             else:
@@ -125,7 +125,7 @@ def _render_watchlists(client: AlpacaClient) -> None:
                     key="wl_rename_select",
                 )
                 rename_val = st.text_input("New name", key="wl_rename_name")
-                if st.button("Rename", key="wl_rename_btn", use_container_width=True):
+                if st.button("Rename", key="wl_rename_btn", width="stretch"):
                     if not rename_val or not rename_val.strip():
                         st.error("Name is required.")
                     else:
@@ -139,7 +139,7 @@ def _render_watchlists(client: AlpacaClient) -> None:
                             handle_alpaca_error(exc)
 
     with col_delete:
-        with st.popover("Delete", use_container_width=True):
+        with st.popover("Delete", width="stretch"):
             if not watchlists:
                 st.info("No watchlists to delete.")
             else:
@@ -151,7 +151,7 @@ def _render_watchlists(client: AlpacaClient) -> None:
                 )
                 st.warning(f"This will permanently delete '{wl_to_delete.name}'.")
                 if st.button(
-                    "Delete", key="wl_delete_btn", type="primary", use_container_width=True
+                    "Delete", key="wl_delete_btn", type="primary", width="stretch"
                 ):
                     try:
                         delete_watchlist(client, wl_to_delete.watchlist_id)
@@ -178,9 +178,9 @@ def _render_watchlists(client: AlpacaClient) -> None:
     add_col, remove_col, _ = st.columns([1, 1, 2])
 
     with add_col:
-        with st.popover("Add Symbol", use_container_width=True):
+        with st.popover("Add Symbol", width="stretch"):
             sym_input = st.text_input("Symbol", key="wl_add_sym", placeholder="e.g. AAPL")
-            if st.button("Add", key="wl_add_btn", use_container_width=True):
+            if st.button("Add", key="wl_add_btn", width="stretch"):
                 if not sym_input or not sym_input.strip():
                     st.error("Enter a symbol.")
                 else:
@@ -194,12 +194,12 @@ def _render_watchlists(client: AlpacaClient) -> None:
                         handle_alpaca_error(exc)
 
     with remove_col:
-        with st.popover("Remove Symbol", use_container_width=True):
+        with st.popover("Remove Symbol", width="stretch"):
             if not selected.symbols:
                 st.info("No symbols to remove.")
             else:
                 sym_to_remove = st.selectbox("Symbol", selected.symbols, key="wl_remove_sym_select")
-                if st.button("Remove", key="wl_remove_btn", use_container_width=True):
+                if st.button("Remove", key="wl_remove_btn", width="stretch"):
                     try:
                         remove_symbol(client, selected.watchlist_id, sym_to_remove)
                         st.success(f"Removed {sym_to_remove}")
@@ -242,7 +242,7 @@ def _render_watchlists(client: AlpacaClient) -> None:
         st.dataframe(
             df,
             column_config=column_config,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=tbl_height,
         )

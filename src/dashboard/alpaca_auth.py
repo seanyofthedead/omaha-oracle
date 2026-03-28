@@ -76,7 +76,7 @@ def render_alpaca_auth() -> AlpacaClient | None:
             type="password",
             placeholder="APCA-API-SECRET-KEY",
         )
-        submitted = st.form_submit_button("Connect", use_container_width=True)
+        submitted = st.form_submit_button("Connect", width="stretch")
 
     if submitted:
         if not api_key or not secret_key:

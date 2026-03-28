@@ -97,7 +97,7 @@ def render() -> None:
                 test_ticker = st.text_input("Ticker to test", placeholder="e.g., AAPL")
             with test_col2:
                 test_tier = st.selectbox("Model tier", ["analysis", "bulk"], index=0)
-            run_test = st.form_submit_button("Run A/B Test", use_container_width=True)
+            run_test = st.form_submit_button("Run A/B Test", width="stretch")
 
         if run_test and test_ticker:
             st.warning(

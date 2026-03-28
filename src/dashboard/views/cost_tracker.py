@@ -131,7 +131,7 @@ def render() -> None:
                     yaxis_tickformat=",.0f",
                     showlegend=False,
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
                 st.caption(
                     "Dashed line shows the monthly budget. "
                     "Bars exceeding it indicate months where "
@@ -162,7 +162,7 @@ def render() -> None:
                         "Month": st.column_config.TextColumn("Month"),
                         "Spent": st.column_config.NumberColumn("Spent", format="$%,.2f"),
                     },
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     height=min(len(history) * 35 + 38, 400),
                 )

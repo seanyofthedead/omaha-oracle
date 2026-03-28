@@ -123,7 +123,7 @@ def render() -> None:
             }
         )
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     # ── Export ────────────────────────────────────────────────────────
     from dashboard.fmt import render_export_button
@@ -159,4 +159,4 @@ def render() -> None:
         xaxis_title="",
         yaxis_title="",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")

@@ -103,7 +103,7 @@ def render_positions_table(client: AlpacaClient) -> None:
     st.dataframe(
         df,
         column_config=column_config,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=min(len(rows) * 35 + 38, 400),
     )

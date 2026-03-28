@@ -88,7 +88,7 @@ def render_sidebar(page_names: list[str]) -> str:
     st.sidebar.divider()
 
     # ── Refresh Data ──
-    if st.sidebar.button("↻ Refresh Data", use_container_width=True):
+    if st.sidebar.button("↻ Refresh Data", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 
@@ -104,7 +104,7 @@ def render_sidebar(page_names: list[str]) -> str:
         )
 
     # ── Restart Tour ──
-    if st.sidebar.button("Restart Tour", use_container_width=True):
+    if st.sidebar.button("Restart Tour", width="stretch"):
         st.session_state.tour_completed = False
         st.session_state.tour_dismissed = False
         st.session_state.tour_step = 0

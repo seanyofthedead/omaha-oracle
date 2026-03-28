@@ -127,7 +127,7 @@ def _render_config_form() -> None:
             max_value=60,
             value=15,
         )
-        submitted = st.form_submit_button("Start Search", use_container_width=True)
+        submitted = st.form_submit_button("Start Search", width="stretch")
 
     if submitted:
         config = SearchConfig(num_results=num_results, time_limit_minutes=time_limit)
@@ -339,4 +339,4 @@ def _render_results_table(results: list[SearchResult]) -> None:
             }
         )
 
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)

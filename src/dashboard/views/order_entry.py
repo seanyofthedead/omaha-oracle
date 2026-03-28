@@ -241,7 +241,7 @@ def _render_order_form(client: AlpacaClient, st) -> None:
                 placeholder="Required for stop/stop-limit",
             )
 
-        submitted = st.form_submit_button("Review Order", use_container_width=True)
+        submitted = st.form_submit_button("Review Order", width="stretch")
 
     if submitted:
         errors = validate_order_params(
@@ -290,7 +290,7 @@ def _render_confirmation(client: AlpacaClient, st) -> None:
 
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
-        if st.button("Submit Order", type="primary", use_container_width=True):
+        if st.button("Submit Order", type="primary", width="stretch"):
             ok, result = submit_order_safe(
                 client,
                 symbol=order["symbol"],
@@ -310,7 +310,7 @@ def _render_confirmation(client: AlpacaClient, st) -> None:
             else:
                 st.error(result)
     with col_cancel:
-        if st.button("Cancel", use_container_width=True):
+        if st.button("Cancel", width="stretch"):
             st.session_state.pending_order = None
             st.rerun()
 
@@ -349,7 +349,7 @@ def _render_order_history(client: AlpacaClient, st, pd) -> None:
     # Build display rows
     rows = [format_order_row(o) for o in filtered]
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     # Cancel buttons for open orders
     open_orders = [o for o in filtered if o.status in _OPEN_STATUSES]

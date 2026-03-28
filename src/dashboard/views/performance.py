@@ -201,7 +201,7 @@ def render() -> None:
         height=400,
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── Drawdown chart ───────────────────────────────────────────────
     st.subheader("Drawdown")
@@ -233,7 +233,7 @@ def render() -> None:
             xaxis_title="",
             height=250,
         )
-        st.plotly_chart(fig_dd, use_container_width=True)
+        st.plotly_chart(fig_dd, width="stretch")
 
     # ── Trade statistics ─────────────────────────────────────────────
     if journal:

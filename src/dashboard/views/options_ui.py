@@ -60,7 +60,7 @@ def _render_chain_viewer(client: AlpacaClient) -> None:
     with col2:
         fetch = st.button(
             "Load Chain",
-            use_container_width=True,
+            width="stretch",
             key="options_fetch",
             disabled=not underlying,
         )
@@ -124,7 +124,7 @@ def _render_chain_viewer(client: AlpacaClient) -> None:
         df = contracts_to_dataframe(filtered)
         st.dataframe(
             df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Strike": st.column_config.NumberColumn(format="$%.2f"),
@@ -203,7 +203,7 @@ def _render_single_leg_order(client: AlpacaClient) -> None:
                 key="opt_sl_tif",
             )
 
-        submitted = st.form_submit_button("Review Order", use_container_width=True)
+        submitted = st.form_submit_button("Review Order", width="stretch")
 
     if submitted:
         errors = validate_option_order(
@@ -344,7 +344,7 @@ def _render_multi_leg_order(client: AlpacaClient) -> None:
                 key="opt_ml_tif",
             )
 
-        submitted = st.form_submit_button("Review Order", use_container_width=True)
+        submitted = st.form_submit_button("Review Order", width="stretch")
 
     if submitted:
         # Build legs

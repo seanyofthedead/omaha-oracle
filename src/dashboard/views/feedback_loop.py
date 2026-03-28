@@ -151,7 +151,7 @@ def render() -> None:
                 st.dataframe(
                     lesson_df,
                     column_config=lesson_col_config,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     height=min(len(rows) * 35 + 38, 400),
                 )
@@ -221,7 +221,7 @@ def render() -> None:
                         yaxis_tickformat=".0%",
                         showlegend=False,
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                     st.caption(
                         "Each point is one quarterly review. "
                         "A declining trend means the system is "
@@ -279,7 +279,7 @@ def render() -> None:
                 st.dataframe(
                     cal_df,
                     column_config=cal_col_config,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     height=min(len(cal_rows) * 35 + 38, 300),
                 )
@@ -324,7 +324,7 @@ def render() -> None:
                 )
                 expiry_quarters = st.slider("Expiry (quarters)", 4, 12, 8)
 
-            submitted = st.form_submit_button("Create Lesson", use_container_width=True)
+            submitted = st.form_submit_button("Create Lesson", width="stretch")
 
             if submitted:
                 if not description or not actionable_rule:
@@ -395,7 +395,7 @@ def render() -> None:
                         "Metric": st.column_config.TextColumn("Metric"),
                         "Value": st.column_config.TextColumn("Value"),
                     },
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     height=min(len(thresh_rows) * 35 + 38, 400),
                 )

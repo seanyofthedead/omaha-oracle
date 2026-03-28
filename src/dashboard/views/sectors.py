@@ -102,7 +102,7 @@ def render() -> None:
             yaxis_title="",
             height=max(300, len(sectors) * 50),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Sector detail table
         import pandas as pd
@@ -123,7 +123,7 @@ def render() -> None:
         df = pd.DataFrame(sector_data)
         st.dataframe(
             df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Value": st.column_config.NumberColumn(format="$%,.0f"),
@@ -190,7 +190,7 @@ def render() -> None:
                         xaxis_title=f"Return ({period})",
                         height=max(350, len(sectors_r) * 45),
                     )
-                    st.plotly_chart(fig2, use_container_width=True)
+                    st.plotly_chart(fig2, width="stretch")
 
                     # Opportunity callout
                     held_sectors = set(sector_pcts.keys())
@@ -261,4 +261,4 @@ def render() -> None:
             height=500,
             margin=dict(t=30, b=10, l=10, r=10),
         )
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, width="stretch")

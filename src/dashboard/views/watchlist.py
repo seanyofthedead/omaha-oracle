@@ -219,7 +219,7 @@ def render() -> None:
             st.dataframe(
                 val_df,
                 column_config=val_column_config,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 height=tbl_height,
             )
@@ -230,7 +230,7 @@ def render() -> None:
             st.dataframe(
                 qual_df,
                 column_config=qual_column_config,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 height=tbl_height,
             )
@@ -302,7 +302,7 @@ def _render_compare_tab(filtered: list[dict]) -> None:
         title="Ticker Comparison",
         height=450,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── Side-by-side metric cards ──
     st.subheader("Key Stats")

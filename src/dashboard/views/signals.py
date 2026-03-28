@@ -327,7 +327,7 @@ def render() -> None:
                 yaxis_title="Ticker",
                 height=400,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("No signals to display on timeline.")
 

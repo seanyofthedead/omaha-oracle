@@ -80,7 +80,7 @@ def render() -> None:
             height=220,
             margin=dict(t=40, b=0, l=30, r=30),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with detail_col:
         comp = health["components"]
@@ -205,7 +205,7 @@ def render() -> None:
             st.dataframe(
                 pos_df,
                 column_config=pos_column_config,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 height=min(len(pos_rows) * 35 + 38, 400),
             )
@@ -292,7 +292,7 @@ def render() -> None:
                         xaxis_ticksuffix="%",
                         showlegend=False,
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                     st.caption(
                         "Dashed line marks the 35% sector "
                         "concentration limit. Bars crossing "
@@ -304,7 +304,7 @@ def render() -> None:
                     st.subheader("Breakdown")
                     st.dataframe(
                         alloc_rows,
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True,
                         height=min(len(alloc_rows) * 35 + 38, 300),
                     )
@@ -414,7 +414,7 @@ def render() -> None:
                     xaxis_title="Date",
                     height=450,
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
                 st.caption(
                     "S&P 500 (SPY) indexed to 100 at the date of the first decision. "
                     "Green/red triangles mark BUY/SELL decisions."
@@ -450,7 +450,7 @@ def render() -> None:
                         "Unknown",
                     ],
                 )
-                sc_submit = st.form_submit_button("Run Scenario", use_container_width=True)
+                sc_submit = st.form_submit_button("Run Scenario", width="stretch")
 
         with col_result:
             if sc_submit and sc_ticker:

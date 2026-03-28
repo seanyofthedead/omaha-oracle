@@ -88,7 +88,7 @@ def render_position_detail(position: dict[str, Any], portfolio_value: float) -> 
                     xaxis_title="Date",
                     height=400,
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             else:
                 st.info(f"No price history available for {ticker}.")
         except ImportError:

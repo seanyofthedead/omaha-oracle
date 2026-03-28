@@ -132,7 +132,7 @@ def render() -> None:
             xaxis_title="",
             height=380,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Day P&L from equity curve
         if len(history.equity) >= 2:

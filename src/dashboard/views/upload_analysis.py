@@ -52,7 +52,7 @@ def render() -> None:
         with col_s2:
             industry = st.text_input("Industry (optional)", placeholder="e.g. Consumer Electronics")
 
-        submitted = st.form_submit_button("Run Analysis", use_container_width=True)
+        submitted = st.form_submit_button("Run Analysis", width="stretch")
 
     # ── Handle submission ──
     if submitted:
