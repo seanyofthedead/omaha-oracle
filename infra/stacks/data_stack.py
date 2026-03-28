@@ -328,10 +328,10 @@ class DataStack(cdk.Stack):
                 layers=[self._deps_layer],
                 log_retention=logs.RetentionDays.ONE_WEEK,
                 tracing=lambda_.Tracing.ACTIVE,
-                # Limit concurrency to avoid triggering rate limits on SEC EDGAR / Yahoo Finance.
-                # Keep at 1 so total reserved across all Lambdas stays well under the
-                # account-wide unreserved-concurrency minimum of 10.
-                reserved_concurrent_executions=1,
+                # Use unreserved (on-demand) concurrency — setting to 0 removes
+                # the reservation so it doesn't count against the account-wide
+                # unreserved-concurrency minimum of 10.
+                reserved_concurrent_executions=0,
             )
             fn.add_to_role_policy(dynamodb_policy)
             fn.add_to_role_policy(s3_policy)
