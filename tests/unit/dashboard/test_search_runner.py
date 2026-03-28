@@ -218,14 +218,23 @@ def _make_failing_pipeline(*args, **kwargs):
     }
 
 
+def _mock_eval_store():
+    """Return a mock EvaluatedTickerStore that does nothing."""
+    mock = MagicMock()
+    mock.get_evaluated_tickers.return_value = set()
+    mock.mark_evaluated.return_value = None
+    return mock
+
+
 class TestRunSearch:
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner.thesis_handler")
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_stops_at_requested_count(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis, _mock_es
     ):
         # Set up generator to return tickers
         mock_gen = MagicMock()
@@ -246,13 +255,14 @@ class TestRunSearch:
         matches = [r for r in results if r.passed_all_gates]
         assert len(matches) == 2
 
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner.thesis_handler")
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_stops_at_time_limit(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis, _mock_es
     ):
         mock_gen = MagicMock()
         mock_gen.generate_batch.return_value = [f"T{i}" for i in range(100)]
@@ -286,13 +296,14 @@ class TestRunSearch:
         matches = [r for r in results if r.passed_all_gates]
         assert len(matches) < 10
 
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner.thesis_handler")
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_stops_at_hard_cap(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis, _mock_es
     ):
         mock_gen = MagicMock()
         mock_gen.generate_batch.return_value = [f"T{i}" for i in range(60)]
@@ -310,11 +321,14 @@ class TestRunSearch:
         results = run_search(config, progress, cancel)
         assert len(results) <= 200
 
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
-    def test_search_stops_on_cancel(self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline):
+    def test_search_stops_on_cancel(
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, _mock_es
+    ):
         mock_gen = MagicMock()
         mock_gen.generate_batch.return_value = [f"T{i}" for i in range(20)]
         mock_gen.get_cik.return_value = "0000000001"
@@ -347,12 +361,13 @@ class TestRunSearch:
         results = run_search(config, progress, cancel)
         assert len(results) <= 3  # At most 2-3 evals before cancel takes effect
 
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_skips_prescreen_failures(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, _mock_es
     ):
         mock_gen = MagicMock()
         mock_gen.generate_batch.return_value = ["GOOD", "BAD", "GOOD2"]
@@ -380,12 +395,13 @@ class TestRunSearch:
         pipeline_tickers = [call.args[0] for call in mock_pipeline.call_args_list]
         assert "BAD" not in pipeline_tickers
 
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_handles_pipeline_failure(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, _mock_es
     ):
         mock_gen = MagicMock()
         # generate_batch(0) for init, then a batch, then empty to stop
@@ -415,12 +431,13 @@ class TestRunSearch:
         assert err_results[0].error is not None
         assert len(ok_results) == 1
 
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_handles_ingestion_failure(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, _mock_es
     ):
         mock_gen = MagicMock()
         mock_gen.generate_batch.return_value = ["FAIL", "OK"]
@@ -447,13 +464,14 @@ class TestRunSearch:
         pipeline_tickers = [call.args[0] for call in mock_pipeline.call_args_list]
         assert "FAIL" not in pipeline_tickers
 
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner.thesis_handler")
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_search_runs_thesis_only_for_qualifiers(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, mock_thesis, _mock_es
     ):
         mock_gen = MagicMock()
         mock_gen.generate_batch.return_value = ["P1", "P2", "F1", "F2", "F3"]
@@ -478,11 +496,14 @@ class TestRunSearch:
         run_search(config, progress, cancel)
         assert mock_thesis.call_count == 2
 
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
-    def test_search_returns_near_misses(self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline):
+    def test_search_returns_near_misses(
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, _mock_es
+    ):
         mock_gen = MagicMock()
         # generate_batch(0) for init, then one batch, then empty to stop
         mock_gen.generate_batch.side_effect = [[], ["NEAR"], []]
@@ -517,12 +538,13 @@ class TestRunSearch:
 
 
 class TestProgressResultsMemory:
+    @patch("dashboard.search_runner.EvaluatedTickerStore", return_value=_mock_eval_store())
     @patch("dashboard.search_runner._run_pipeline_stages")
     @patch("dashboard.search_runner.ingest_ticker_data")
     @patch("dashboard.search_runner.pre_screen_ticker")
     @patch("dashboard.search_runner.SmartCandidateGenerator")
     def test_progress_results_does_not_grow_unbounded(
-        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline
+        self, mock_gen_cls, mock_pre, mock_ingest, mock_pipeline, _mock_es
     ):
         """After evaluating N tickers, progress['results'] must hold at most one
         copy of the list, not N accumulated copies from results[:] slicing."""

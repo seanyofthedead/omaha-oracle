@@ -82,8 +82,35 @@ def _init_session_state() -> None:
             st.session_state[key] = default
 
 
+def _render_evaluated_info() -> None:
+    """Show how many tickers have been previously evaluated, with reset option."""
+    try:
+        from shared.evaluated_store import EvaluatedTickerStore
+
+        store = EvaluatedTickerStore()
+        count = store.get_evaluation_count()
+    except Exception:
+        return  # Table may not exist yet (pre-deploy); silently skip
+
+    if count == 0:
+        return
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.info(
+            f"Skipping **{count}** previously evaluated companies "
+            f"(auto-reset after 90 days)."
+        )
+    with col2:
+        if st.button("Reset List", help="Clear the evaluated list to re-scan all companies"):
+            store.clear_all()
+            st.success("Evaluated list cleared.")
+            st.rerun()
+
+
 def _render_config_form() -> None:
     """Render the search configuration form."""
+    _render_evaluated_info()
     if st.session_state.get("search_results"):
         st.warning("Previous results will be cleared when starting a new search.")
 
@@ -147,6 +174,11 @@ def _render_progress() -> None:
         cancel_event = st.session_state.get("search_cancel_event")
         if cancel_event:
             cancel_event.set()
+
+    # Previously evaluated info
+    skipped = progress.get("skipped_previously_evaluated", 0)
+    if skipped:
+        st.caption(f"Skipping {skipped} previously evaluated companies.")
 
     # Hero metrics
     screener_count = progress.get("screener_count", 0)

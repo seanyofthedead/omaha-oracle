@@ -27,6 +27,7 @@ from dashboard.search_config import (
 )
 from shared.config import get_config
 from shared.dynamo_client import DynamoClient
+from shared.evaluated_store import EvaluatedTickerStore
 from shared.logger import get_logger
 
 _log = get_logger(__name__)
@@ -238,6 +239,11 @@ def run_search(
     cfg = get_config()
     financials_client = DynamoClient(cfg.table_financials)
 
+    # --- Load previously evaluated tickers ---
+    eval_store = EvaluatedTickerStore()
+    previously_evaluated = eval_store.get_evaluated_tickers()
+    search_id = f"search-{int(time.time())}"
+
     # --- Tier 1 + 2: screener + ranking ---
     progress.update(
         {
@@ -246,11 +252,15 @@ def run_search(
             "evaluated_count": 0,
             "match_count": 0,
             "elapsed_seconds": 0,
+            "skipped_previously_evaluated": len(previously_evaluated),
         }
     )
 
     start_time = time.monotonic()
-    generator = SmartCandidateGenerator(max_screener_results=SCREENER_MAX_RESULTS)
+    generator = SmartCandidateGenerator(
+        evaluated=previously_evaluated,
+        max_screener_results=SCREENER_MAX_RESULTS,
+    )
 
     # Trigger initialization (Tier 1 + 2) so we can report the count
     generator.generate_batch(0)
@@ -342,11 +352,15 @@ def run_search(
                 )
                 results.append(sr)
                 evaluated_count += 1
+                eval_store.mark_evaluated(ticker, passed=False, search_id=search_id)
                 continue
 
             evaluated_count += 1
             sr = _build_search_result(ticker, pipeline_result)
             results.append(sr)
+            eval_store.mark_evaluated(
+                ticker, passed=sr.passed_all_gates, search_id=search_id
+            )
 
             if sr.passed_all_gates:
                 match_count += 1

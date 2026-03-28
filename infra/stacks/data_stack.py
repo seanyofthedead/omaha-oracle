@@ -133,6 +133,21 @@ class DataStack(cdk.Stack):
                 kwargs_ddb["sort_key"] = dynamodb.Attribute(name=sk, type=sk_type)
             return dynamodb.Table(self, construct_id, **kwargs_ddb)  # type: ignore[arg-type]
 
+        self.tbl_universe = dynamodb.Table(
+            self,
+            "TblUniverse",
+            table_name=f"{prefix}-universe",
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+            removal_policy=RemovalPolicy.RETAIN,
+            partition_key=dynamodb.Attribute(
+                name="ticker", type=dynamodb.AttributeType.STRING
+            ),
+            time_to_live_attribute="ttl",
+        )
+
         self.tbl_companies = _table(
             "TblCompanies", f"{prefix}-companies", pk="ticker"
         )
