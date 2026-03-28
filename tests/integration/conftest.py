@@ -45,8 +45,6 @@ def integration_tables(aws_env: None):
             ],
             BillingMode="PAY_PER_REQUEST",
         )
-        decisions.meta.client.get_waiter("table_exists").wait(TableName=TABLE_DECISIONS)
-
         lessons = ddb.create_table(
             TableName=TABLE_LESSONS,
             KeySchema=[
@@ -71,14 +69,10 @@ def integration_tables(aws_env: None):
             ],
             BillingMode="PAY_PER_REQUEST",
         )
-        lessons.meta.client.get_waiter("table_exists").wait(TableName=TABLE_LESSONS)
-
         config = ddb.create_table(
             TableName=TABLE_CONFIG,
             KeySchema=[{"AttributeName": "config_key", "KeyType": "HASH"}],
             AttributeDefinitions=[{"AttributeName": "config_key", "AttributeType": "S"}],
             BillingMode="PAY_PER_REQUEST",
         )
-        config.meta.client.get_waiter("table_exists").wait(TableName=TABLE_CONFIG)
-
         yield {"decisions": decisions, "lessons": lessons, "config": config}

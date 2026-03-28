@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import boto3
 import pytest
-from moto import mock_aws
 
 from ingestion.web_sources.handler import handler
 from ingestion.web_sources.models import WebCandidate
@@ -22,35 +20,34 @@ def web_env(aws_env, monkeypatch):
 
 
 @pytest.fixture()
-def web_table(web_env):
+def web_table(web_env, _moto_session):
     """Create DynamoDB table for handler tests."""
-    with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="us-east-1")
-        ddb.create_table(
-            TableName=TABLE_NAME,
-            KeySchema=[
-                {"AttributeName": "ticker", "KeyType": "HASH"},
-                {"AttributeName": "source_key", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "ticker", "AttributeType": "S"},
-                {"AttributeName": "source_key", "AttributeType": "S"},
-                {"AttributeName": "status", "AttributeType": "S"},
-                {"AttributeName": "composite_score", "AttributeType": "N"},
-            ],
-            GlobalSecondaryIndexes=[
-                {
-                    "IndexName": "status-score-index",
-                    "KeySchema": [
-                        {"AttributeName": "status", "KeyType": "HASH"},
-                        {"AttributeName": "composite_score", "KeyType": "RANGE"},
-                    ],
-                    "Projection": {"ProjectionType": "ALL"},
-                }
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        yield
+    table = _moto_session.create_table(
+        TableName=TABLE_NAME,
+        KeySchema=[
+            {"AttributeName": "ticker", "KeyType": "HASH"},
+            {"AttributeName": "source_key", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "ticker", "AttributeType": "S"},
+            {"AttributeName": "source_key", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"},
+            {"AttributeName": "composite_score", "AttributeType": "N"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "status-score-index",
+                "KeySchema": [
+                    {"AttributeName": "status", "KeyType": "HASH"},
+                    {"AttributeName": "composite_score", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    yield
+    table.delete()
 
 
 def _fake_candidates(source_name: str) -> list[WebCandidate]:

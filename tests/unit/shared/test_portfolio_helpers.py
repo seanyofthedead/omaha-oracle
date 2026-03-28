@@ -4,9 +4,7 @@ Unit tests for shared.portfolio_helpers — uses moto to mock DynamoDB.
 
 from __future__ import annotations
 
-import boto3
 import pytest
-from moto import mock_aws
 
 from shared.portfolio_helpers import load_portfolio_state
 
@@ -14,24 +12,22 @@ TABLE_NAME = "omaha-oracle-dev-portfolio"
 
 
 @pytest.fixture()
-def portfolio_table(aws_env: None):  # noqa: ARG001
+def portfolio_table(aws_env: None, _moto_session):  # noqa: ARG001
     """Create moto portfolio DynamoDB table (composite key pk+sk)."""
-    with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = ddb.create_table(
-            TableName=TABLE_NAME,
-            KeySchema=[
-                {"AttributeName": "pk", "KeyType": "HASH"},
-                {"AttributeName": "sk", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "pk", "AttributeType": "S"},
-                {"AttributeName": "sk", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.meta.client.get_waiter("table_exists").wait(TableName=TABLE_NAME)
-        yield table
+    table = _moto_session.create_table(
+        TableName=TABLE_NAME,
+        KeySchema=[
+            {"AttributeName": "pk", "KeyType": "HASH"},
+            {"AttributeName": "sk", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "pk", "AttributeType": "S"},
+            {"AttributeName": "sk", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    yield table
+    table.delete()
 
 
 class TestLoadPortfolioState:

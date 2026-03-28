@@ -4,9 +4,7 @@ Unit tests for shared.analysis_client — uses moto to mock DynamoDB.
 
 from __future__ import annotations
 
-import boto3
 import pytest
-from moto import mock_aws
 
 from shared.analysis_client import load_latest_analysis, merge_latest_analysis
 
@@ -14,24 +12,22 @@ TABLE_NAME = "omaha-oracle-dev-analysis"
 
 
 @pytest.fixture()
-def analysis_table(aws_env: None):  # noqa: ARG001
+def analysis_table(aws_env: None, _moto_session):  # noqa: ARG001
     """Create moto analysis DynamoDB table."""
-    with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = ddb.create_table(
-            TableName=TABLE_NAME,
-            KeySchema=[
-                {"AttributeName": "ticker", "KeyType": "HASH"},
-                {"AttributeName": "analysis_date", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "ticker", "AttributeType": "S"},
-                {"AttributeName": "analysis_date", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.meta.client.get_waiter("table_exists").wait(TableName=TABLE_NAME)
-        yield table
+    table = _moto_session.create_table(
+        TableName=TABLE_NAME,
+        KeySchema=[
+            {"AttributeName": "ticker", "KeyType": "HASH"},
+            {"AttributeName": "analysis_date", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "ticker", "AttributeType": "S"},
+            {"AttributeName": "analysis_date", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    yield table
+    table.delete()
 
 
 class TestMergeLatestAnalysis:

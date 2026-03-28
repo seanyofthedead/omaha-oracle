@@ -6,7 +6,6 @@ import re
 
 import boto3
 import pytest
-from moto import mock_aws
 
 from dashboard.upload_storage import (
     check_duplicate_upload,
@@ -19,12 +18,16 @@ S3_BUCKET = "omaha-oracle-dev-data"
 
 
 @pytest.fixture()
-def s3_bucket(aws_env: None):
-    """Create an in-memory S3 bucket using moto."""
-    with mock_aws():
-        s3 = boto3.client("s3", region_name="us-east-1")
-        s3.create_bucket(Bucket=S3_BUCKET)
-        yield s3
+def s3_bucket(aws_env: None, _moto_session):  # noqa: ARG001
+    """Create an in-memory S3 bucket using the shared moto session."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=S3_BUCKET)
+    yield s3
+    # Clean up: delete all objects then the bucket
+    resp = s3.list_objects_v2(Bucket=S3_BUCKET)
+    for obj in resp.get("Contents", []):
+        s3.delete_object(Bucket=S3_BUCKET, Key=obj["Key"])
+    s3.delete_bucket(Bucket=S3_BUCKET)
 
 
 def _meta(**overrides) -> UploadMetadata:

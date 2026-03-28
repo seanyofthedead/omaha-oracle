@@ -3,14 +3,19 @@ Shared pytest fixtures for the Omaha Oracle test suite.
 
 Fixture dependency graph (for DynamoDB tests):
   reset_config (autouse) ──► all tests
+  _moto_session (session) ──► dynamodb_table / lessons_table / iv_tables
   aws_env ──► dynamodb_table ──► cost_tracker
+
+Performance: A single session-scoped mock_aws context is shared across all
+tests.  Each function-scoped fixture creates a fresh table and deletes it on
+teardown (~17 ms), avoiding the ~7 s cold-start of a new mock_aws context.
 """
 
 from __future__ import annotations
 
-import boto3
+from pathlib import Path
+
 import pytest
-from moto import mock_aws
 
 # The table name that Settings._apply_defaults produces for ENVIRONMENT=dev
 TABLE_NAME = "omaha-oracle-dev-cost-tracking"
@@ -19,6 +24,27 @@ TABLE_DECISIONS = "omaha-oracle-dev-decisions"
 TABLE_CONFIG = "omaha-oracle-dev-config"
 TABLE_ANALYSIS = "omaha-oracle-dev-analysis"
 TABLE_COMPANIES = "omaha-oracle-dev-companies"
+
+
+# ------------------------------------------------------------------ #
+# Collection hooks                                                     #
+# ------------------------------------------------------------------ #
+
+
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Skip tests/unit/infra/ unless explicitly requested via ``-m infra``.
+
+    Importing ``aws_cdk`` takes ~60 s.  By skipping the infra directory during
+    normal collection, we avoid that penalty for the 99 % of runs that don't
+    need CDK tests.  Run them explicitly with::
+
+        pytest tests/unit/infra/ -m infra
+    """
+    if "infra" in collection_path.parts:
+        marker_expr = config.getoption("-m", default="")
+        if "infra" not in str(marker_expr):
+            return True
+    return None
 
 
 # ------------------------------------------------------------------ #
@@ -40,6 +66,26 @@ def reset_config():
     yield
     get_config.cache_clear()
     _ssm_get.cache_clear()
+
+
+# ------------------------------------------------------------------ #
+# Session-scoped moto context                                         #
+# ------------------------------------------------------------------ #
+
+
+@pytest.fixture(scope="session")
+def _moto_session():
+    """Single mock_aws context shared across the entire test session.
+
+    Starting a new ``mock_aws()`` context + creating the first
+    ``boto3.resource`` takes ~7 s.  By doing it once and reusing the resource,
+    every subsequent table creation drops to ~17 ms.
+    """
+    import boto3
+    from moto import mock_aws
+
+    with mock_aws():
+        yield boto3.resource("dynamodb", region_name="us-east-1")
 
 
 # ------------------------------------------------------------------ #
@@ -83,34 +129,30 @@ def aws_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture()
-def dynamodb_table(aws_env: None):
+def dynamodb_table(aws_env: None, _moto_session):
     """
-    Spin up an in-memory DynamoDB cost-tracking table using moto.
-
-    The mock_aws context intercepts every boto3 call for the duration of the
-    test, so no real AWS traffic is ever made.  A fresh table is created for
-    each test — no shared mutable state.
+    Create an in-memory DynamoDB cost-tracking table using the shared moto
+    session.  The table is deleted on teardown so the next test gets a clean
+    slate.
 
     Schema mirrors the production table:
       PK  month_key  (S)
       SK  timestamp  (S)
     """
-    with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = ddb.create_table(
-            TableName=TABLE_NAME,
-            KeySchema=[
-                {"AttributeName": "month_key", "KeyType": "HASH"},
-                {"AttributeName": "timestamp", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "month_key", "AttributeType": "S"},
-                {"AttributeName": "timestamp", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.meta.client.get_waiter("table_exists").wait(TableName=TABLE_NAME)
-        yield table
+    table = _moto_session.create_table(
+        TableName=TABLE_NAME,
+        KeySchema=[
+            {"AttributeName": "month_key", "KeyType": "HASH"},
+            {"AttributeName": "timestamp", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "month_key", "AttributeType": "S"},
+            {"AttributeName": "timestamp", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    yield table
+    table.delete()
 
 
 @pytest.fixture()
@@ -127,36 +169,34 @@ def cost_tracker(dynamodb_table):  # noqa: ARG001
 
 
 @pytest.fixture()
-def lessons_table(aws_env: None):
+def lessons_table(aws_env: None, _moto_session):
     """Create lessons DynamoDB table for LessonsClient tests."""
-    with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = ddb.create_table(
-            TableName=TABLE_LESSONS,
-            KeySchema=[
-                {"AttributeName": "lesson_type", "KeyType": "HASH"},
-                {"AttributeName": "lesson_id", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "lesson_type", "AttributeType": "S"},
-                {"AttributeName": "lesson_id", "AttributeType": "S"},
-                {"AttributeName": "active_flag", "AttributeType": "S"},
-                {"AttributeName": "expires_at", "AttributeType": "S"},
-            ],
-            GlobalSecondaryIndexes=[
-                {
-                    "IndexName": "active_flag-expires_at-index",
-                    "KeySchema": [
-                        {"AttributeName": "active_flag", "KeyType": "HASH"},
-                        {"AttributeName": "expires_at", "KeyType": "RANGE"},
-                    ],
-                    "Projection": {"ProjectionType": "ALL"},
-                }
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.meta.client.get_waiter("table_exists").wait(TableName=TABLE_LESSONS)
-        yield table
+    table = _moto_session.create_table(
+        TableName=TABLE_LESSONS,
+        KeySchema=[
+            {"AttributeName": "lesson_type", "KeyType": "HASH"},
+            {"AttributeName": "lesson_id", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "lesson_type", "AttributeType": "S"},
+            {"AttributeName": "lesson_id", "AttributeType": "S"},
+            {"AttributeName": "active_flag", "AttributeType": "S"},
+            {"AttributeName": "expires_at", "AttributeType": "S"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "active_flag-expires_at-index",
+                "KeySchema": [
+                    {"AttributeName": "active_flag", "KeyType": "HASH"},
+                    {"AttributeName": "expires_at", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    yield table
+    table.delete()
 
 
 @pytest.fixture()
@@ -168,23 +208,25 @@ def lessons_client(lessons_table):  # noqa: ARG001
 
 
 @pytest.fixture()
-def iv_tables(aws_env: None):
+def iv_tables(aws_env: None, _moto_session):
     """
     Spin up config, analysis, and companies DynamoDB tables for intrinsic
     value handler tests.  Yields the boto3 dynamodb resource so tests can
     seed data directly via iv_tables.Table(TABLE_CONFIG).put_item(...).
     """
-    with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="us-east-1")
-        # Config table: PK=config_key
-        ddb.create_table(
+    tables = []
+    # Config table: PK=config_key
+    tables.append(
+        _moto_session.create_table(
             TableName=TABLE_CONFIG,
             KeySchema=[{"AttributeName": "config_key", "KeyType": "HASH"}],
             AttributeDefinitions=[{"AttributeName": "config_key", "AttributeType": "S"}],
             BillingMode="PAY_PER_REQUEST",
         )
-        # Analysis table: PK=ticker, SK=analysis_date
-        ddb.create_table(
+    )
+    # Analysis table: PK=ticker, SK=analysis_date
+    tables.append(
+        _moto_session.create_table(
             TableName=TABLE_ANALYSIS,
             KeySchema=[
                 {"AttributeName": "ticker", "KeyType": "HASH"},
@@ -196,11 +238,16 @@ def iv_tables(aws_env: None):
             ],
             BillingMode="PAY_PER_REQUEST",
         )
-        # Companies table: PK=ticker (for _resolve_metrics fallback)
-        ddb.create_table(
+    )
+    # Companies table: PK=ticker (for _resolve_metrics fallback)
+    tables.append(
+        _moto_session.create_table(
             TableName=TABLE_COMPANIES,
             KeySchema=[{"AttributeName": "ticker", "KeyType": "HASH"}],
             AttributeDefinitions=[{"AttributeName": "ticker", "AttributeType": "S"}],
             BillingMode="PAY_PER_REQUEST",
         )
-        yield ddb
+    )
+    yield _moto_session
+    for t in tables:
+        t.delete()

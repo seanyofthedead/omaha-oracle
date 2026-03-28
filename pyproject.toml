@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
 [project]
 name = "omaha-oracle"
 version = "0.1.0"
@@ -45,6 +49,7 @@ pythonpath = ["src"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "e2e: end-to-end tests hitting real APIs (deselect with '-m \"not e2e\"')",
+    "infra: CDK infrastructure tests (slow import; run with '-m infra')",
 ]
 
 [tool.mypy]

@@ -4,9 +4,7 @@ Unit tests for DynamoClient.put_item_if_not_exists and condition_expression supp
 
 from __future__ import annotations
 
-import boto3
 import pytest
-from moto import mock_aws
 
 from shared.dynamo_client import DynamoClient, ItemExistsError
 
@@ -14,23 +12,21 @@ TABLE_NAME = "omaha-oracle-dev-test"
 
 
 @pytest.fixture()
-def dynamo_table(aws_env: None):  # noqa: ARG001
-    with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = ddb.create_table(
-            TableName=TABLE_NAME,
-            KeySchema=[
-                {"AttributeName": "pk", "KeyType": "HASH"},
-                {"AttributeName": "sk", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "pk", "AttributeType": "S"},
-                {"AttributeName": "sk", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.meta.client.get_waiter("table_exists").wait(TableName=TABLE_NAME)
-        yield table
+def dynamo_table(aws_env: None, _moto_session):  # noqa: ARG001
+    table = _moto_session.create_table(
+        TableName=TABLE_NAME,
+        KeySchema=[
+            {"AttributeName": "pk", "KeyType": "HASH"},
+            {"AttributeName": "sk", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "pk", "AttributeType": "S"},
+            {"AttributeName": "sk", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    yield table
+    table.delete()
 
 
 def test_put_item_if_not_exists_returns_true_on_first_write(

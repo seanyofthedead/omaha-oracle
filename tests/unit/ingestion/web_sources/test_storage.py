@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import boto3
 import pytest
-from moto import mock_aws
 
 from ingestion.web_sources.models import AggregatedCandidate
 from ingestion.web_sources.storage import WebCandidateStore
@@ -15,36 +13,34 @@ TABLE_NAME = "omaha-oracle-dev-web-candidates"
 
 
 @pytest.fixture()
-def web_candidates_table(aws_env):
+def web_candidates_table(aws_env, _moto_session):
     """Create the web-candidates DynamoDB table in moto."""
-    with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = ddb.create_table(
-            TableName=TABLE_NAME,
-            KeySchema=[
-                {"AttributeName": "ticker", "KeyType": "HASH"},
-                {"AttributeName": "source_key", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "ticker", "AttributeType": "S"},
-                {"AttributeName": "source_key", "AttributeType": "S"},
-                {"AttributeName": "status", "AttributeType": "S"},
-                {"AttributeName": "composite_score", "AttributeType": "N"},
-            ],
-            GlobalSecondaryIndexes=[
-                {
-                    "IndexName": "status-score-index",
-                    "KeySchema": [
-                        {"AttributeName": "status", "KeyType": "HASH"},
-                        {"AttributeName": "composite_score", "KeyType": "RANGE"},
-                    ],
-                    "Projection": {"ProjectionType": "ALL"},
-                }
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.meta.client.get_waiter("table_exists").wait(TableName=TABLE_NAME)
-        yield table
+    table = _moto_session.create_table(
+        TableName=TABLE_NAME,
+        KeySchema=[
+            {"AttributeName": "ticker", "KeyType": "HASH"},
+            {"AttributeName": "source_key", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "ticker", "AttributeType": "S"},
+            {"AttributeName": "source_key", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"},
+            {"AttributeName": "composite_score", "AttributeType": "N"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "status-score-index",
+                "KeySchema": [
+                    {"AttributeName": "status", "KeyType": "HASH"},
+                    {"AttributeName": "composite_score", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    yield table
+    table.delete()
 
 
 def _make_candidate(
