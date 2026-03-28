@@ -32,6 +32,11 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
+      - name: Build Lambda layer
+        run: |
+          mkdir -p infra/layer/python
+          pip install -t infra/layer/python boto3 requests yfinance anthropic alpaca-py pydantic
+
       - name: CDK deploy
         working-directory: infra
         run: cdk deploy --all -c env=prod --require-approval never
