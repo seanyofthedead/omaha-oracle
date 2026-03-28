@@ -12,7 +12,6 @@ call will be retried on the next Streamlit rerun.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
 from typing import Any
 
 import streamlit as st
@@ -23,13 +22,10 @@ from botocore.exceptions import (
     NoCredentialsError,
 )
 
-from shared.analysis_client import merge_latest_analysis
+from shared.analysis_client import merge_latest_analysis, merge_latest_analysis_with_stages
 from shared.config import get_config
-from shared.cost_tracker import CostTracker
 from shared.dynamo_client import DynamoClient
 from shared.logger import get_logger
-from shared.portfolio_helpers import load_portfolio_state
-from shared.s3_client import S3Client
 
 _log = get_logger(__name__)
 
@@ -70,23 +66,6 @@ def _friendly_aws_message(exc: Exception, resource: str) -> str:
             return f"Could not load {resource}: access denied. Check your IAM permissions."
         return f"Could not load {resource}: AWS error ({code}). Try again shortly."
     return f"Could not load {resource}: {type(exc).__name__}. Try again shortly."
-
-
-@st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
-def load_portfolio() -> dict[str, Any]:
-    """Load portfolio summary and positions."""
-    try:
-        cfg = get_config()
-        state = load_portfolio_state(cfg.table_portfolio)
-    except Exception as exc:
-        _log.warning("load_portfolio failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "portfolio positions")) from exc
-
-    return {
-        "cash": state["cash_available"],
-        "portfolio_value": state["portfolio_value"],
-        "positions": state["positions"],
-    }
 
 
 @st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
@@ -145,273 +124,156 @@ def load_watchlist_analysis() -> list[dict[str, Any]]:
 
 @st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
 def load_decisions(limit: int = 50) -> list[dict[str, Any]]:
-    """Load recent decisions (buy/sell signals) sorted by timestamp."""
+    """Load recent decisions (buy/sell signals) sorted by timestamp.
+
+    Tries the ``record_type-timestamp-index`` GSI first.  If the GSI does not
+    exist yet (table created before ``cdk deploy`` added it), falls back to a
+    full-table scan filtered client-side.
+    """
     try:
         cfg = get_config()
         client = DynamoClient(cfg.table_decisions)
-        return client.query(
-            Key("record_type").eq("DECISION"),
-            index_name="record_type-timestamp-index",
-            scan_forward=False,
-            limit=limit,
-        )
+        try:
+            return client.query(
+                Key("record_type").eq("DECISION"),
+                index_name="record_type-timestamp-index",
+                scan_forward=False,
+                limit=limit,
+            )
+        except ClientError as gsi_exc:
+            code = gsi_exc.response.get("Error", {}).get("Code", "")
+            if code != "ValidationException":
+                raise
+            # GSI missing — fall back to scan
+            _log.warning(
+                "GSI record_type-timestamp-index not found on decisions table, "
+                "falling back to scan. Run 'cdk deploy' to create the index.",
+            )
+            all_items = client.scan_all()
+            decisions = [
+                item for item in all_items
+                if item.get("record_type") == "DECISION"
+            ]
+            decisions.sort(key=lambda d: d.get("timestamp", ""), reverse=True)
+            return decisions[:limit]
+    except DataLoadError:
+        raise
     except Exception as exc:
         _log.warning("load_decisions failed", extra={"error": str(exc)})
         raise DataLoadError(_friendly_aws_message(exc, "buy/sell decisions")) from exc
 
 
-@st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
-def load_cost_data(months: int = 12) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Load monthly spend and budget status."""
+@st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
+def load_predictions() -> list[dict[str, Any]]:
+    """Load predictions from decisions table, flattened from decision payloads.
+
+    Returns a flat list of prediction dicts enriched with ticker and decision metadata.
+    """
     try:
-        tracker = CostTracker()
-        dt = datetime.now(UTC)
-        month_keys = []
-        for i in range(months):
-            year = dt.year
-            month = dt.month - i
-            while month <= 0:
-                month += 12
-                year -= 1
-            month_keys.append(f"{year}-{month:02d}")
-        with ThreadPoolExecutor(max_workers=2) as ex:
-            f_history = ex.submit(tracker.get_spend_history, month_keys)
-            f_budget = ex.submit(tracker.check_budget)
-        spend_by_month = f_history.result()
-        status = f_budget.result()
-        history = [{"month": mk, "spent_usd": spend_by_month.get(mk, 0.0)} for mk in month_keys]
-        return history, status
+        decisions = load_decisions(limit=200)
+    except DataLoadError:
+        raise
     except Exception as exc:
-        _log.warning("load_cost_data failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "LLM cost data")) from exc
+        _log.warning("load_predictions failed", extra={"error": str(exc)})
+        raise DataLoadError(_friendly_aws_message(exc, "prediction data")) from exc
 
+    predictions: list[dict[str, Any]] = []
+    for decision in decisions:
+        payload = decision.get("payload") or {}
+        preds = payload.get("predictions")
+        if not preds or not isinstance(preds, list):
+            continue
 
-@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
-def load_letter_keys() -> list[str]:
-    """List Owner's Letter keys in S3 (letters/...)."""
-    try:
-        cfg = get_config()
-        s3 = S3Client(bucket=cfg.s3_bucket)
-        keys = s3.list_keys(prefix="letters/")
-        return sorted(keys, reverse=True)
-    except Exception as exc:
-        _log.warning("load_letter_keys failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "owner's letter archive")) from exc
+        ticker = (decision.get("ticker") or "").strip().upper()
+        decision_ts = decision.get("timestamp", "")
 
+        for pred in preds:
+            if not isinstance(pred, dict):
+                continue
+            predictions.append({
+                **pred,
+                "ticker": ticker,
+                "decision_timestamp": decision_ts,
+                "decision_id": decision.get("decision_id", ""),
+            })
 
-@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
-def load_letter_content(key: str) -> str:
-    """Load markdown content of a letter."""
-    try:
-        cfg = get_config()
-        s3 = S3Client(bucket=cfg.s3_bucket)
-        return s3.read_markdown(key)
-    except Exception as exc:
-        _log.warning("load_letter_content failed", extra={"key": key, "error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, f"letter '{key}'")) from exc
+    # Sort: pending first (by deadline ascending), then evaluated (by deadline descending)
+    def sort_key(p: dict) -> tuple:
+        is_pending = 0 if p.get("status") == "pending" else 1
+        return (is_pending, p.get("deadline", ""))
 
-
-@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
-def load_postmortem_keys() -> list[str]:
-    """List postmortem JSON keys in S3."""
-    try:
-        cfg = get_config()
-        s3 = S3Client(bucket=cfg.s3_bucket)
-        keys = s3.list_keys(prefix="postmortems/")
-        return sorted(keys, reverse=True)
-    except Exception as exc:
-        _log.warning("load_postmortem_keys failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "postmortem archive")) from exc
-
-
-@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
-def load_postmortem(key: str) -> dict[str, Any]:
-    """Load postmortem JSON."""
-    try:
-        cfg = get_config()
-        s3 = S3Client(bucket=cfg.s3_bucket)
-        return s3.read_json(key)
-    except Exception as exc:
-        _log.warning("load_postmortem failed", extra={"key": key, "error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, f"postmortem '{key}'")) from exc
+    predictions.sort(key=sort_key)
+    return predictions
 
 
 @st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
-def load_lessons() -> list[dict[str, Any]]:
-    """Load active lessons from DynamoDB."""
+def load_all_pipeline_candidates(analysis_date: str | None = None) -> list[dict[str, Any]]:
+    """Load ALL screened candidates from the analysis table with stage-level pass/fail.
+
+    Unlike ``load_watchlist_analysis`` which only returns watchlist tickers,
+    this scans the entire analysis table to surface every company that was
+    ever screened — including those that failed early stages.
+
+    Parameters
+    ----------
+    analysis_date:
+        Optional date prefix (``YYYY-MM-DD``) to filter results to a single
+        pipeline run.  When ``None``, returns the latest run per ticker.
+    """
     try:
         cfg = get_config()
-        client = DynamoClient(cfg.table_lessons)
-        now = datetime.now(UTC).isoformat()
-        return client.query(
-            Key("active_flag").eq("1") & Key("expires_at").gt(now),
-            index_name="active_flag-expires_at-index",
-        )
-    except Exception as exc:
-        _log.warning("load_lessons failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "active lessons")) from exc
+        client = DynamoClient(cfg.table_analysis)
 
+        if analysis_date:
+            from boto3.dynamodb.conditions import Attr
 
-@st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
-def load_portfolio_history() -> dict[str, Any]:
-    """Load portfolio value history and SPY benchmark for performance comparison."""
-    try:
-        cfg = get_config()
-        client = DynamoClient(cfg.table_decisions)
-        # Get all decisions to build timeline
-        decisions = client.query(
-            Key("record_type").eq("DECISION"),
-            index_name="record_type-timestamp-index",
-            scan_forward=True,
-        )
-
-        if not decisions:
-            return {"dates": [], "portfolio_values": [], "spy_values": [], "metrics": {}}
-
-        from datetime import datetime as dt_cls
-
-        try:
-            import yfinance as yf
-        except ImportError:
-            _log.warning("yfinance not installed — portfolio history unavailable")
-            return {"dates": [], "portfolio_values": [], "spy_values": [], "metrics": {}}
-
-        timestamps = [d.get("timestamp", "") for d in decisions if d.get("timestamp")]
-        if not timestamps:
-            return {"dates": [], "portfolio_values": [], "spy_values": [], "metrics": {}}
-
-        start_date = min(timestamps)[:10]  # YYYY-MM-DD
-
-        # Fetch SPY data for benchmark
-        spy = yf.download("SPY", start=start_date, progress=False)
-        if spy.empty:
-            return {"dates": [], "portfolio_values": [], "spy_values": [], "metrics": {}}
-
-        # Build simplified portfolio value series from decisions
-        # Use SPY dates as the x-axis, normalize both to 100 at start
-        spy_closes = spy["Close"].dropna()
-        dates = [d.strftime("%Y-%m-%d") for d in spy_closes.index]
-        spy_values = (spy_closes / spy_closes.iloc[0] * 100).tolist()
-
-        # Count buy/sell decisions over time as a proxy for portfolio activity
-        buy_dates = [d["timestamp"][:10] for d in decisions if d.get("signal") == "BUY"]
-        sell_dates = [d["timestamp"][:10] for d in decisions if d.get("signal") == "SELL"]
-
-        # Also load current portfolio for actual return calculation
-        state = load_portfolio_state(cfg.table_portfolio)
-        portfolio_value = state.get("portfolio_value", 100000)
-
-        # Calculate basic metrics
-        if len(spy_values) >= 2:
-            spy_return = (spy_values[-1] / spy_values[0] - 1) * 100
+            all_items = client.scan_all(
+                filter_expression=Attr("analysis_date").begins_with(analysis_date),
+            )
         else:
-            spy_return = 0.0
-
-        total_decisions = len(decisions)
-        total_buys = len(buy_dates)
-        total_sells = len(sell_dates)
-
-        return {
-            "dates": dates,
-            "spy_values": spy_values if isinstance(spy_values, list) else [float(v) for v in spy_values],
-            "buy_dates": buy_dates,
-            "sell_dates": sell_dates,
-            "metrics": {
-                "spy_return_pct": round(spy_return, 2),
-                "total_decisions": total_decisions,
-                "total_buys": total_buys,
-                "total_sells": total_sells,
-                "start_date": start_date,
-                "portfolio_value": portfolio_value,
-            },
-        }
+            all_items = client.scan_all()
     except Exception as exc:
-        _log.warning("load_portfolio_history failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "portfolio history")) from exc
+        _log.warning("load_all_pipeline_candidates failed", extra={"error": str(exc)})
+        raise DataLoadError(
+            _friendly_aws_message(exc, "pipeline candidates")
+        ) from exc
 
+    if not all_items:
+        return []
 
-@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
-def load_thesis_content(ticker: str) -> str | None:
-    """Load the latest thesis markdown for a ticker from S3."""
-    try:
-        cfg = get_config()
-        s3 = S3Client(bucket=cfg.s3_bucket)
-        # List thesis keys for this ticker
-        keys = s3.list_keys(prefix=f"theses/{ticker}/")
-        if not keys:
-            return None
-        # Get the latest one (sorted descending)
-        latest_key = sorted(keys, reverse=True)[0]
-        return s3.read_markdown(latest_key)
-    except Exception as exc:
-        _log.warning("load_thesis_content failed", extra={"ticker": ticker, "error": str(exc)})
-        return None  # Non-critical — just won't show thesis
+    by_ticker: dict[str, list[dict[str, Any]]] = {}
+    for item in all_items:
+        t = item.get("ticker", "").strip().upper()
+        if t:
+            by_ticker.setdefault(t, []).append(item)
 
-
-def save_lesson(lesson: dict[str, Any]) -> None:
-    """Save a new or updated lesson to DynamoDB."""
-    try:
-        cfg = get_config()
-        client = DynamoClient(cfg.table_lessons)
-        client.put_item(lesson)
-        # Clear the lessons cache so the new lesson appears immediately
-        load_lessons.clear()
-    except Exception as exc:
-        _log.warning("save_lesson failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "saving lesson")) from exc
-
-
-def retire_lesson(lesson_type: str, lesson_id: str) -> None:
-    """Retire a lesson by setting active_flag to '0'."""
-    try:
-        cfg = get_config()
-        client = DynamoClient(cfg.table_lessons)
-        client.update_item(
-            key={"lesson_type": lesson_type, "lesson_id": lesson_id},
-            update_expression="SET active_flag = :af",
-            expression_attribute_values={":af": "0"},
-        )
-        # Clear cache
-        load_lessons.clear()
-    except Exception as exc:
-        _log.warning("retire_lesson failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "retiring lesson")) from exc
+    candidates = []
+    for ticker, items in sorted(by_ticker.items()):
+        merged = merge_latest_analysis_with_stages(items, ticker)
+        if merged:
+            candidates.append(merged)
+    return candidates
 
 
 @st.cache_data(ttl=_TTL_ANALYSIS, show_spinner=False)
-def load_lesson_effectiveness() -> dict[str, Any]:
-    """Load lesson injection counts and effectiveness metrics."""
+def load_pipeline_run_dates() -> list[str]:
+    """Return distinct analysis run dates, newest first."""
     try:
         cfg = get_config()
-        client = DynamoClient(cfg.table_lessons)
-        # Get ALL lessons (not just active) to see historical effectiveness
-        all_lessons = client.scan_all()
-
-        total_lessons = len(all_lessons)
-        active_count = sum(1 for ls in all_lessons if ls.get("active_flag") == "1")
-        total_injections = sum(ls.get("times_injected", 0) for ls in all_lessons)
-        manual_count = sum(1 for ls in all_lessons if ls.get("source") == "manual")
-
-        return {
-            "total_lessons": total_lessons,
-            "active_count": active_count,
-            "total_injections": total_injections,
-            "manual_count": manual_count,
-            "lessons": all_lessons,
-        }
+        client = DynamoClient(cfg.table_analysis)
+        all_items = client.scan_all()
     except Exception as exc:
-        _log.warning("load_lesson_effectiveness failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "lesson effectiveness data")) from exc
+        _log.warning("load_pipeline_run_dates failed", extra={"error": str(exc)})
+        raise DataLoadError(
+            _friendly_aws_message(exc, "pipeline run dates")
+        ) from exc
+
+    dates: set[str] = set()
+    for item in all_items:
+        sk = item.get("analysis_date", "")
+        date_part = sk.split("#")[0] if "#" in sk else sk
+        if date_part:
+            dates.add(date_part)
+    return sorted(dates, reverse=True)
 
 
-@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
-def load_config_thresholds() -> dict[str, Any]:
-    """Load screening thresholds from config table."""
-    try:
-        cfg = get_config()
-        client = DynamoClient(cfg.table_config)
-        item = client.get_item({"config_key": "screening_thresholds"})
-        return (item.get("value") or {}) if item else {}
-    except Exception as exc:
-        _log.warning("load_config_thresholds failed", extra={"error": str(exc)})
-        raise DataLoadError(_friendly_aws_message(exc, "screening thresholds")) from exc

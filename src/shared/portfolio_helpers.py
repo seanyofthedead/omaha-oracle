@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from shared.logger import get_logger
+
+_log = get_logger(__name__)
+
 
 def load_portfolio_state(table_name: str) -> dict[str, Any]:
     """
@@ -34,11 +38,25 @@ def load_portfolio_state(table_name: str) -> dict[str, Any]:
 
     client = DynamoClient(table_name)
 
-    account = client.get_item({"pk": "ACCOUNT", "sk": "SUMMARY"})
+    try:
+        account = client.get_item({"pk": "ACCOUNT", "sk": "SUMMARY"})
+    except Exception:
+        _log.error(
+            "Failed to load account summary from portfolio table",
+            extra={"table": table_name},
+        )
+        raise
     cash = safe_float(account.get("cash_available", 0)) if account else 0.0
     total = safe_float(account.get("portfolio_value", 0)) if account else 0.0
 
-    positions_raw = client.query(Key("pk").eq("POSITION"))
+    try:
+        positions_raw = client.query(Key("pk").eq("POSITION"))
+    except Exception:
+        _log.error(
+            "Failed to query positions from portfolio table",
+            extra={"table": table_name},
+        )
+        raise
     positions: list[dict[str, Any]] = []
     sector_value: dict[str, float] = {}
 

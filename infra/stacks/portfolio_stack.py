@@ -28,9 +28,13 @@ from aws_cdk import (
     aws_lambda as lambda_,
 )
 from aws_cdk import (
+    aws_logs as logs,
+)
+from aws_cdk import (
     aws_sns as sns,
 )
 from constructs import Construct
+
 
 class PortfolioStack(cdk.Stack):
     """
@@ -154,6 +158,8 @@ class PortfolioStack(cdk.Stack):
                 timeout=timeout,
                 environment=env,
                 layers=[deps_layer],
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                tracing=lambda_.Tracing.ACTIVE,
                 # Explicit retry config — safe after idempotency guards are deployed (PR 5)
                 retry_attempts=2,
                 max_event_age=Duration.hours(1),

@@ -204,6 +204,21 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "position_size_usd": buy_result.get("position_size_usd"),
             "position_pct": buy_result.get("position_pct"),
         }
+
+        # Attach predictions from thesis generator (if any) for decision journaling
+        if buy_result["signal"] == "BUY":
+            raw_predictions = analysis.get("predictions") or []
+            pred_prefix = f"pred_{ticker}_{uuid.uuid4().hex[:8]}"
+            predictions_with_status = []
+            for i, pred in enumerate(raw_predictions):
+                if isinstance(pred, dict):
+                    predictions_with_status.append({
+                        **pred,
+                        "id": f"{pred_prefix}_{i}",
+                        "status": "pending",
+                    })
+            payload["predictions"] = predictions_with_status
+
         _log_decision(decisions_client, "BUY", ticker, buy_result["signal"], payload)
         decisions_logged += 1
         buy_decisions.append({"ticker": ticker, **buy_result})

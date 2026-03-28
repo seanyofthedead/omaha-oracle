@@ -28,6 +28,9 @@ from aws_cdk import (
     aws_lambda_event_sources as lambda_events,
 )
 from aws_cdk import (
+    aws_logs as logs,
+)
+from aws_cdk import (
     aws_sns as sns,
 )
 from aws_cdk import (
@@ -40,6 +43,7 @@ from aws_cdk import (
     aws_stepfunctions_tasks as sfn_tasks,
 )
 from constructs import Construct
+
 
 class AnalysisStack(cdk.Stack):
     """
@@ -166,6 +170,8 @@ class AnalysisStack(cdk.Stack):
                 timeout=timeout,
                 environment=shared_env,
                 layers=[deps_layer],
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                tracing=lambda_.Tracing.ACTIVE,
             )
             fn.add_to_role_policy(data_policy)
             fn.add_to_role_policy(s3_policy)
@@ -336,6 +342,7 @@ class AnalysisStack(cdk.Stack):
             definition_body=sfn.DefinitionBody.from_chainable(definition),
             timeout=Duration.minutes(30),
             comment="Omaha Oracle end-to-end analysis pipeline",
+            tracing_enabled=True,
         )
 
         # Alert on any Step Functions execution failure

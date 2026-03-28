@@ -156,7 +156,13 @@ class LessonsClient:
                     expression_attribute_values={":zero": 0, ":inc": 1},
                 )
             except Exception:
-                pass  # Non-critical — don't block analysis
+                _log.warning(
+                    "Failed to increment injection count for lesson",
+                    extra={
+                        "lesson_type": lesson.get("lesson_type"),
+                        "lesson_id": lesson.get("lesson_id"),
+                    },
+                )
 
         return self._format_for_injection(top)
 

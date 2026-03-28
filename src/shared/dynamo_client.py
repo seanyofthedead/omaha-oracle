@@ -391,7 +391,18 @@ def store_analysis_result(
         "result": result,
         "passed": passed,
     }
-    analysis.put_item(item)
+    try:
+        analysis.put_item(item)
+    except Exception:
+        _log.error(
+            "Failed to store analysis result",
+            extra={"table": table_name, "ticker": ticker, "screen_type": screen_type},
+        )
+        raise
+    _log.info(
+        "Analysis result stored",
+        extra={"ticker": ticker, "screen_type": screen_type, "passed": passed},
+    )
 
 
 def get_watchlist_tickers(table_name: str) -> list[str]:
@@ -412,5 +423,14 @@ def get_watchlist_tickers(table_name: str) -> list[str]:
         Sorted list of uppercase ticker symbols found in the table.
     """
     client = DynamoClient(table_name)
-    items = client.scan_all(projection_expression="ticker")
-    return [i["ticker"] for i in items if i.get("ticker")]
+    try:
+        items = client.scan_all(projection_expression="ticker")
+    except Exception:
+        _log.error(
+            "Failed to scan watchlist table",
+            extra={"table": table_name},
+        )
+        raise
+    tickers = [i["ticker"] for i in items if i.get("ticker")]
+    _log.info("Loaded watchlist tickers", extra={"count": len(tickers)})
+    return tickers

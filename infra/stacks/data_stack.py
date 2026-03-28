@@ -39,6 +39,9 @@ from aws_cdk import (
     aws_lambda as lambda_,
 )
 from aws_cdk import (
+    aws_logs as logs,
+)
+from aws_cdk import (
     aws_s3 as s3,
 )
 from aws_cdk import (
@@ -323,6 +326,8 @@ class DataStack(cdk.Stack):
                 timeout=timeout,
                 environment=shared_env,
                 layers=[self._deps_layer],
+                log_retention=logs.RetentionDays.ONE_WEEK,
+                tracing=lambda_.Tracing.ACTIVE,
                 # Limit concurrency to avoid triggering rate limits on SEC EDGAR / Yahoo Finance.
                 # Keep at 1 so total reserved across all Lambdas stays well under the
                 # account-wide unreserved-concurrency minimum of 10.
@@ -469,6 +474,8 @@ class DataStack(cdk.Stack):
             timeout=timeout,
             environment=env,
             layers=[self._deps_layer],
+            log_retention=logs.RetentionDays.ONE_WEEK,
+            tracing=lambda_.Tracing.ACTIVE,
         )
 
         # Grant S3 read/write by default

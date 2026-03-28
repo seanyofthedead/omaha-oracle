@@ -165,10 +165,11 @@ def render() -> None:
             if new_sells:
                 parts.append(f"{new_sells} SELL")
             label = " and ".join(parts) if parts else f"{new_count} new"
-            st.toast(
-                f"{label} signal{'s' if new_count > 1 else ''} since your last visit",
-                icon=":material/notifications:",
-            )
+            if "page_toast_shown" not in st.session_state:
+                st.toast(
+                    f"{label} signal{'s' if new_count > 1 else ''} since your last visit",
+                    icon=":material/notifications:",
+                )
 
         st.session_state.last_seen_signal_ts = latest_signal_ts
 

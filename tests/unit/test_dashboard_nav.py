@@ -31,15 +31,13 @@ import pytest
 DASHBOARD_DIR = Path(__file__).resolve().parents[2] / "src" / "dashboard"
 APP_MODULE = "dashboard.app"
 EXPECTED_PAGES = {
+    "Account Summary": "dashboard.views.account_summary",
     "Portfolio Overview": "dashboard.views.portfolio",
-    "Watchlist": "dashboard.views.watchlist",
-    "Signals": "dashboard.views.signals",
-    "Cost Tracker": "dashboard.views.cost_tracker",
-    "Owner's Letters": "dashboard.views.letters",
-    "Feedback Loop": "dashboard.views.feedback_loop",
-    "Upload Analysis": "dashboard.views.upload_analysis",
-    "Company Search": "dashboard.views.company_search",
-    "Paper Trading": "dashboard.views.paper_trading",
+    "Trade History": "dashboard.views.trade_history",
+    "Order Management": "dashboard.views.order_management",
+    "Performance": "dashboard.views.performance",
+    "Decision Journal": "dashboard.views.decision_journal",
+    "Watchlist & Pipeline": "dashboard.views.pipeline",
 }
 
 
@@ -74,19 +72,14 @@ class TestNoAutoNavTrigger:
 
 class TestViewsDirectoryContents:
     EXPECTED_FILES = {
+        "account_summary.py",
         "portfolio.py",
-        "watchlist.py",
-        "signals.py",
-        "cost_tracker.py",
-        "letters.py",
-        "feedback_loop.py",
-        "upload_analysis.py",
-        "company_search.py",
-        "paper_trading.py",
-        "account_portfolio.py",
-        "analytics.py",
+        "trade_history.py",
+        "order_management.py",
         "order_entry.py",
-        "options_ui.py",
+        "performance.py",
+        "decision_journal.py",
+        "pipeline.py",
     }
 
     def test_all_page_files_present(self):
@@ -125,8 +118,8 @@ class TestPageModuleMapping:
                 "This would import from the renamed directory and fail at runtime."
             )
 
-    def test_all_nine_pages_registered(self):
-        assert len(self._get_page_modules()) == 9
+    def test_all_pages_registered(self):
+        assert len(self._get_page_modules()) == 7
 
 
 # ---------------------------------------------------------------------------
