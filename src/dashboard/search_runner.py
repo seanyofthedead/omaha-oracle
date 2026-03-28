@@ -31,6 +31,34 @@ from shared.logger import get_logger
 
 _log = get_logger(__name__)
 
+
+class ThreadSafeProgress:
+    """Thread-safe dict-like object for sharing progress between threads."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._data: dict[str, Any] = {}
+
+    def update(self, d: dict[str, Any]) -> None:
+        with self._lock:
+            self._data.update(d)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._data[key] = value
+
+    def __getitem__(self, key: str) -> Any:
+        with self._lock:
+            return self._data[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        with self._lock:
+            return self._data.get(key, default)
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._data)
+
 # Expose handler references so tests can patch them at module level.
 moat_handler = _moat_mod.handler
 mgmt_handler = _mgmt_mod.handler

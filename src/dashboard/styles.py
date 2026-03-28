@@ -6,6 +6,8 @@ import plotly.io as pio
 import streamlit as st
 import streamlit.components.v1 as components
 
+import dashboard.charts as _charts  # noqa: F401 — registers plotly templates
+
 _LIGHT_CSS = """
 <style>
 /* ── AREA 1: SPACING & LAYOUT ────────────────────────────────────── */

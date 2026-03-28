@@ -55,7 +55,12 @@
       "Read(//mnt/**)",
       "Bash(ls /mnt/)",
       "Bash(mkdir -p \"C:/Users/peder/Documents/omaha_oracle/.claude/skills\")",
-      "Bash(mv \"C:/Users/peder/Documents/omaha_oracle/git-guardian\" \"C:/Users/peder/Documents/omaha_oracle/.claude/skills/git-guardian\")"
+      "Bash(mv \"C:/Users/peder/Documents/omaha_oracle/git-guardian\" \"C:/Users/peder/Documents/omaha_oracle/.claude/skills/git-guardian\")",
+      "Bash(PYTHONPATH=src python -c \"from dashboard.styles import apply_custom_styles; print\\(''''Import OK''''\\)\")",
+      "Bash(PYTHONPATH=src python -c \"from shared.analysis_client import _STAGE_DISPLAY, PIPELINE_STAGE_ORDER; print\\('Import OK'\\); print\\('Stages:', PIPELINE_STAGE_ORDER\\); print\\('Display:', _STAGE_DISPLAY\\)\")",
+      "Bash(PYTHONPATH=src python -c \"from dashboard.views.pipeline import *; print\\(''''pipeline.py imports OK''''\\)\")",
+      "Bash(PYTHONPATH=src python -c \"from shared.analysis_client import _STAGE_DISPLAY, PIPELINE_STAGE_ORDER; print\\('OK'\\)\")",
+      "Bash(PYTHONPATH=src python -c \"from dashboard.search_runner import ThreadSafeProgress; p = ThreadSafeProgress\\(\\); p.update\\({'a': 1}\\); p['b'] = 2; print\\('snapshot:', p.snapshot\\(\\)\\); print\\('OK'\\)\")"
     ]
   }
 }

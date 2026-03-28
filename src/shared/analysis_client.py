@@ -12,6 +12,23 @@ from shared.logger import get_logger
 
 _log = get_logger(__name__)
 
+# Canonical pipeline stage order (matches Step Functions state machine).
+PIPELINE_STAGE_ORDER: list[str] = [
+    "quant_screen",
+    "moat_analysis",
+    "management_quality",
+    "intrinsic_value",
+    "thesis_generation",
+]
+
+_STAGE_DISPLAY: dict[str, str] = {
+    "quant_screen": "Quant Screen",
+    "moat_analysis": "Moat Analysis",
+    "management_quality": "Management Quality",
+    "intrinsic_value": "Intrinsic Value",
+    "thesis_generation": "Thesis Generation",
+}
+
 
 def merge_latest_analysis(
     items: list[dict[str, Any]],
