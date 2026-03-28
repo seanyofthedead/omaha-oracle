@@ -92,9 +92,10 @@ class SchemaWebSource(BaseWebSource):
 
         candidates: list[WebCandidate] = []
         for rec in stocks:
-            ticker = rec.get("ticker", "").strip().upper()
-            if not ticker:
+            raw_ticker = rec.get("ticker")
+            if not isinstance(raw_ticker, str) or not raw_ticker.strip():
                 continue
+            ticker = raw_ticker.strip().upper()
             try:
                 candidates.append(
                     WebCandidate(
