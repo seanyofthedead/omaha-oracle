@@ -118,11 +118,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # Store to DynamoDB
     store = WebCandidateStore()
-    stored = store.store_candidates(ranked)
+    stored, failed = store.store_candidates(ranked)
 
     summary = {
-        "status": "ok" if not errors else "partial",
+        "status": "ok" if not errors and failed == 0 else "partial",
         "processed": stored,
+        "store_failures": failed,
         "errors": errors[:10],
         "raw_candidates": len(all_candidates),
         "unique_tickers": len(ranked),

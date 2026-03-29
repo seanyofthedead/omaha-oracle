@@ -230,10 +230,11 @@ class LessonsClient:
                 self._db.batch_write(items)
                 expired = len(items)
             except Exception as exc:
-                _log.warning(
+                _log.error(
                     "Failed to batch-expire lessons",
                     extra={"count": len(items), "error": str(exc)},
                 )
+                raise
 
         if expired:
             _log.info("Expired stale lessons", extra={"count": expired})

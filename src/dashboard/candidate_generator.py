@@ -96,7 +96,8 @@ def refresh_web_candidates() -> int:
     ranked = aggregator.process(all_candidates)
 
     store = WebCandidateStore()
-    return store.store_candidates(ranked)
+    stored, _failed = store.store_candidates(ranked)
+    return stored
 
 # ---------------------------------------------------------------------------
 # Tier 1: EquityQuery bulk filter

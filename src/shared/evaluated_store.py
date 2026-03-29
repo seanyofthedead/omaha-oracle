@@ -48,8 +48,11 @@ class EvaluatedTickerStore:
         passed: bool,
         search_id: str | None = None,
         ttl_days: int = _DEFAULT_TTL_DAYS,
-    ) -> None:
-        """Record that *ticker* was evaluated by the pipeline."""
+    ) -> bool:
+        """Record that *ticker* was evaluated by the pipeline.
+
+        Returns True on success, False on failure.
+        """
         now = datetime.now(UTC)
         item: dict[str, Any] = {
             "ticker": ticker,
@@ -60,11 +63,13 @@ class EvaluatedTickerStore:
         }
         try:
             self._client.put_item(item)
+            return True
         except Exception:
-            _log.warning(
+            _log.error(
                 "Failed to record evaluated ticker",
                 extra={"ticker": ticker},
             )
+            return False
 
     def get_evaluation_count(self) -> int:
         """Return the number of non-expired evaluated tickers."""

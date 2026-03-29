@@ -74,9 +74,12 @@ class WebCandidateStore:
         self._table_name = table_name or get_config().table_web_candidates
         self._client = DynamoClient(self._table_name)
 
-    def store_candidates(self, candidates: list[AggregatedCandidate]) -> int:
-        """Upsert aggregated candidates.  Returns count stored."""
+    def store_candidates(
+        self, candidates: list[AggregatedCandidate]
+    ) -> tuple[int, int]:
+        """Upsert aggregated candidates.  Returns (stored_count, failure_count)."""
         stored = 0
+        failures: list[str] = []
         for candidate in candidates:
             item = _to_dynamo_item(candidate)
             # Remove None values (DynamoDB doesn't accept None)
@@ -85,15 +88,25 @@ class WebCandidateStore:
                 self._client.put_item(item)
                 stored += 1
             except Exception:
+                failures.append(candidate.ticker)
                 _log.warning(
                     "Failed to store web candidate",
                     extra={"ticker": candidate.ticker},
                 )
+        if failures:
+            _log.error(
+                "Web candidate store had write failures",
+                extra={
+                    "failed_count": len(failures),
+                    "failed_tickers": failures,
+                    "total": len(candidates),
+                },
+            )
         _log.info(
             "Stored web candidates",
-            extra={"stored": stored, "total": len(candidates)},
+            extra={"stored": stored, "failed": len(failures), "total": len(candidates)},
         )
-        return stored
+        return stored, len(failures)
 
     def get_top_candidates(
         self,
