@@ -71,6 +71,8 @@ class PortfolioStack(cdk.Stack):
             "TABLE_DECISIONS": f"{prefix}-decisions",
             "TABLE_WATCHLIST": f"{prefix}-watchlist",
             "TABLE_LESSONS": f"{prefix}-lessons",
+            "TABLE_UNIVERSE": f"{prefix}-universe",
+            "TABLE_WEB_CANDIDATES": f"{prefix}-web-candidates",
             "S3_BUCKET": f"{prefix}-data",
             "ANALYSIS_QUEUE_URL": (
                 f"https://sqs.{self.region}.amazonaws.com/{self.account}/{prefix}-analysis-queue"
@@ -101,7 +103,10 @@ class PortfolioStack(cdk.Stack):
                 "dynamodb:DeleteItem",
                 "dynamodb:BatchWriteItem",
             ],
-            resources=[f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*"],
+            resources=[
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*",
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*/index/*",
+            ],
         )
         s3_policy = iam.PolicyStatement(
             actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
@@ -202,6 +207,7 @@ class PortfolioStack(cdk.Stack):
             "Alpaca order placement — paper and live trading",
         )
         self.fn_risk.grant_invoke(self.fn_execution)
+        alert_topic.grant_publish(self.fn_execution)
 
         # ---------------------------------------------------------------- #
         # Stack outputs                                                     #
