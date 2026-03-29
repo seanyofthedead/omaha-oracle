@@ -276,24 +276,27 @@ def _render_all_candidates(held: set[str], pending: set[str]) -> None:
     st.divider()
 
     # ── Filters ──────────────────────────────────────────────────────
-    col_status, col_sector, col_sort = st.columns(3)
-
     all_statuses = sorted(
         {_STATUS_LABELS.get(c.get("pipeline_status", ""), "Unknown") for c in candidates}
     )
+    all_sectors = sorted({c.get("sector", "Unknown") for c in candidates})
+
+    col_status, col_sector, col_sort = st.columns(3)
+
     with col_status:
         status_filter = st.multiselect(
             "Filter by Status",
             all_statuses,
             key="pipeline_status_filter",
+            placeholder="All statuses",
         )
 
-    all_sectors = sorted({c.get("sector", "Unknown") for c in candidates})
     with col_sector:
         sector_filter = st.multiselect(
             "Filter by Sector",
             all_sectors,
             key="pipeline_sector_filter",
+            placeholder="All sectors",
         )
 
     with col_sort:
@@ -313,6 +316,17 @@ def _render_all_candidates(held: set[str], pending: set[str]) -> None:
         ]
     if sector_filter:
         filtered = [c for c in filtered if c.get("sector", "Unknown") in sector_filter]
+
+    # Show filter status
+    if not status_filter and not sector_filter:
+        st.caption(f"Showing all {len(filtered)} candidates — no filters applied")
+    else:
+        parts = []
+        if status_filter:
+            parts.append(f"status: {', '.join(status_filter)}")
+        if sector_filter:
+            parts.append(f"sector: {', '.join(sector_filter)}")
+        st.caption(f"Showing {len(filtered)} of {len(candidates)} candidates — {'; '.join(parts)}")
 
     # Sort
     if sort_by == "Stage Reached":
