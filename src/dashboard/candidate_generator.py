@@ -49,6 +49,55 @@ def _fetch_web_candidates() -> list[dict[str, Any]]:
         _log.debug("Web candidates not available (table may not exist yet)")
         return []
 
+
+def refresh_web_candidates() -> int:
+    """Run a live Firecrawl scrape and store results in the web-candidates table.
+
+    Scrapes all enabled sources, aggregates and deduplicates candidates, then
+    stores them in DynamoDB.  Returns the number of candidates stored.
+    """
+    from ingestion.web_sources.aggregator import CandidateAggregator
+    from ingestion.web_sources.models import WebCandidate
+    from ingestion.web_sources.sources import build_default_registry
+    from ingestion.web_sources.storage import WebCandidateStore
+    from shared.firecrawl_client import FirecrawlClient
+
+    cfg = get_config()
+    try:
+        api_key = cfg.get_firecrawl_key()
+    except Exception:
+        _log.warning("Firecrawl API key not configured, skipping web scrape")
+        return 0
+
+    registry = build_default_registry()
+    sources = registry.get_enabled()
+    if not sources:
+        _log.info("No enabled web sources")
+        return 0
+
+    client = FirecrawlClient(api_key=api_key)
+    all_candidates: list[WebCandidate] = []
+
+    for source in sources:
+        try:
+            _log.info("Scraping web source", extra={"source": source.name})
+            candidates = source.scrape(client)
+            all_candidates.extend(candidates)
+        except Exception as exc:
+            _log.warning(
+                "Web source scrape failed",
+                extra={"source": source.name, "error": str(exc)},
+            )
+
+    if not all_candidates:
+        return 0
+
+    aggregator = CandidateAggregator()
+    ranked = aggregator.process(all_candidates)
+
+    store = WebCandidateStore()
+    return store.store_candidates(ranked)
+
 # ---------------------------------------------------------------------------
 # Tier 1: EquityQuery bulk filter
 # ---------------------------------------------------------------------------
@@ -283,8 +332,9 @@ class SmartCandidateGenerator:
                 _log.warning("Fallback screener also failed")
                 raw = []
 
-        # Merge web-sourced candidates from DynamoDB
+        # Scrape web sources and merge candidates
         if self._include_web_sources:
+            refresh_web_candidates()
             web_dicts = _fetch_web_candidates()
             self.web_candidate_count = len(web_dicts)
             if web_dicts:
