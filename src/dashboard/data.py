@@ -273,6 +273,42 @@ def load_pipeline_run_dates() -> list[str]:
     return sorted(dates, reverse=True)
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_closed_orders(limit: int = 500) -> list[dict[str, Any]]:
+    """Fetch closed orders from Alpaca, cached for 2 minutes.
+
+    Returns a list of order dicts with standard keys (order_id, symbol,
+    side, qty, etc.).  Used by performance, analytics, and trade_history
+    views — a single cache avoids redundant API calls.
+    """
+    from dashboard.alpaca_session import get_alpaca_client
+
+    try:
+        client = get_alpaca_client()
+        orders = client.get_orders(status="closed", limit=limit)
+    except Exception as exc:
+        _log.warning("fetch_closed_orders failed", extra={"error": str(exc)})
+        raise DataLoadError(f"Could not load closed orders: {exc}") from exc
+
+    return [
+        {
+            "order_id": o.order_id,
+            "symbol": o.symbol,
+            "side": o.side,
+            "qty": o.qty,
+            "order_type": o.order_type,
+            "time_in_force": o.time_in_force,
+            "status": o.status,
+            "created_at": o.created_at,
+            "filled_at": o.filled_at,
+            "filled_avg_price": o.filled_avg_price,
+            "limit_price": o.limit_price,
+            "stop_price": o.stop_price,
+        }
+        for o in orders
+    ]
+
+
 @st.cache_data(ttl=_TTL_MARKET, show_spinner=False)
 def load_portfolio() -> dict[str, Any]:
     """Load account summary and open positions from Alpaca.

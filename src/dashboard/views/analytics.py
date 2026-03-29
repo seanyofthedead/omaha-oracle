@@ -13,6 +13,7 @@ import streamlit as st
 
 from dashboard.alpaca_client import AlpacaClient
 from dashboard.alpaca_errors import handle_alpaca_error
+from dashboard.alpaca_models import OrderInfo
 from dashboard.analytics import (
     PortfolioHistory,
     build_journal_entries,
@@ -20,6 +21,7 @@ from dashboard.analytics import (
     prepare_equity_chart_data,
 )
 from dashboard.charts import ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED
+from dashboard.data import fetch_closed_orders
 from dashboard.fmt import fmt_currency, fmt_pct
 
 # ── Session-state key for editable journal notes ─────────────────────────
@@ -140,12 +142,13 @@ def _render_trade_journal(client: AlpacaClient) -> list[float]:
     st.subheader("Trade Journal")
 
     try:
-        filled = client.get_orders(status="closed", limit=500)
+        order_dicts = fetch_closed_orders()
     except Exception as exc:
         handle_alpaca_error(exc)
         return []
 
-    entries = build_journal_entries(filled)
+    order_objects = [OrderInfo(**{k: v for k, v in o.items()}) for o in order_dicts]
+    entries = build_journal_entries(order_objects)
 
     if not entries:
         st.info("No closed trades yet.  Completed round-trip trades will appear here.")

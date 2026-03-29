@@ -161,7 +161,7 @@ def render() -> None:
             if new_sells:
                 parts.append(f"{new_sells} SELL")
             label = " and ".join(parts) if parts else f"{new_count} new"
-            if "page_toast_shown" not in st.session_state:
+            if "signals_toast_shown" not in st.session_state:
                 st.toast(
                     f"{label} signal{'s' if new_count > 1 else ''} since your last visit",
                     icon=":material/notifications:",
@@ -263,14 +263,14 @@ def render() -> None:
     signal_df = pd.DataFrame(signal_rows)
     render_export_button(signal_df, "signals", label="Download Signals CSV")
 
-    if "page_toast_shown" not in st.session_state:
+    if "signals_toast_shown" not in st.session_state:
         st.toast(
             f"Showing {len(decisions)} signals "
             f"({len(buy_decisions)} buys, "
             f"{len(sell_decisions)} sells)",
             icon="\u2705",
         )
-        st.session_state.page_toast_shown = True
+        st.session_state.signals_toast_shown = True
 
     # ── Tier 2: Primary content in tabs ──
     tab_all, tab_buys, tab_sells, tab_timeline = st.tabs(
