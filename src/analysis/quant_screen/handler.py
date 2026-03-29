@@ -43,6 +43,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     companies = companies_client.scan_all()
 
     passing: list[dict[str, Any]] = []
+    analysis_items: list[dict[str, Any]] = []
 
     for comp in companies:
         ticker = comp.get("ticker")
@@ -108,14 +109,18 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             },
         )
 
-        analysis_item = {
-            "ticker": ticker,
-            "analysis_date": sk,
-            "screen_type": "quant_screen",
-            "result": result,
-            "passed": passed,
-        }
-        analysis_client.put_item(analysis_item)
+        analysis_items.append(
+            {
+                "ticker": ticker,
+                "analysis_date": sk,
+                "screen_type": "quant_screen",
+                "result": result,
+                "passed": passed,
+            }
+        )
+
+    if analysis_items:
+        analysis_client.batch_write(analysis_items)
 
     return {
         "passing_tickers": passing,

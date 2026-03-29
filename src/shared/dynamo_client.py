@@ -366,6 +366,7 @@ def store_analysis_result(
     screen_type: str,
     result: dict[str, Any],
     passed: bool,
+    client: DynamoClient | None = None,
 ) -> None:
     """
     Write one row to the analysis DynamoDB table.
@@ -386,11 +387,15 @@ def store_analysis_result(
         Full result dict to store.
     passed:
         Whether this analysis stage passed its threshold.
+    client:
+        Optional pre-constructed ``DynamoClient``.  When *None* a new client
+        is created for *table_name*.  Pass the caller's existing client to
+        avoid allocating a new boto3 resource on every call.
     """
     from shared.converters import today_str
 
     sk = f"{today_str()}#{screen_type}"
-    analysis = DynamoClient(table_name)
+    analysis = client or DynamoClient(table_name)
     item: dict[str, Any] = {
         "ticker": ticker,
         "analysis_date": sk,

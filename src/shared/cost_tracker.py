@@ -19,6 +19,7 @@ SK  timestamp  str   ISO-8601 UTC, e.g. "2026-03-15T18:00:00.123456+00:00"
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import TypedDict
@@ -102,6 +103,9 @@ class CostTracker:
         ``get_config().table_cost_tracking`` is used.
     """
 
+    # How long (seconds) a cached budget check remains valid before re-querying.
+    _CACHE_TTL: float = 60.0
+
     def __init__(self, table_name: str | None = None) -> None:
         """Initialize the tracker, defaulting to the configured cost-tracking table."""
         cfg = get_config()
@@ -109,6 +113,10 @@ class CostTracker:
         self._region = cfg.aws_region
         self._budget_usd = Decimal(str(cfg.monthly_budget_usd()))
         self._table = boto3.resource("dynamodb", region_name=self._region).Table(self._table_name)
+        # In-memory cache for check_budget to avoid querying DynamoDB on every LLM call.
+        self._cached_spend: Decimal | None = None
+        self._cache_month_key: str | None = None
+        self._cache_ts: float = 0.0
 
     # ------------------------------------------------------------------ #
     # Public API                                                           #
@@ -222,8 +230,11 @@ class CostTracker:
 
     def get_spend_history(self, month_keys: list[str]) -> dict[str, float]:
         """
-        Return total USD spend for each key in *month_keys* using a single
-        table scan, rather than one Query per month.
+        Return total USD spend for each key in *month_keys*.
+
+        Issues one DynamoDB Query per month key, summing ``cost_usd`` values
+        for each partition.  Pagination within each query is handled
+        automatically.
 
         Parameters
         ----------
@@ -232,7 +243,7 @@ class CostTracker:
 
         Returns
         -------
-        dict mapping month_key → total spend in USD (float).
+        dict mapping month_key -> total spend in USD (float).
         Missing months are omitted from the result (caller should default to 0).
         """
         if not month_keys:
@@ -270,6 +281,9 @@ class CostTracker:
         """
         Return a snapshot of budget usage for *month_key* (default: this month).
 
+        Uses a 60-second in-memory cache to avoid querying DynamoDB on every
+        LLM call.  The cache is keyed by *month_key* and refreshed when stale.
+
         Returns
         -------
         BudgetStatus
@@ -280,7 +294,19 @@ class CostTracker:
             - ``exhausted``       – True when spend ≥ budget
             - ``utilization_pct`` – (spent / budget) × 100, capped at 100
         """
-        spent = self.get_monthly_spend(month_key)
+        effective_key = month_key or datetime.now(tz=UTC).strftime("%Y-%m")
+        now = time.monotonic()
+        if (
+            self._cached_spend is not None
+            and self._cache_month_key == effective_key
+            and (now - self._cache_ts) < self._CACHE_TTL
+        ):
+            spent = self._cached_spend
+        else:
+            spent = self.get_monthly_spend(month_key)
+            self._cached_spend = spent
+            self._cache_month_key = effective_key
+            self._cache_ts = now
         budget = self._budget_usd
         remaining = max(Decimal("0"), budget - spent)
         exhausted = spent >= budget
