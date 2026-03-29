@@ -128,6 +128,138 @@ def _seed_financials(ddb, ticker: str) -> None:
             )
 
 
+class TestParallelMergeDataFlow:
+    """
+    Data flow tests for the parallel pipeline: moat -> parallel(mgmt, iv) -> merge.
+
+    These invoke the merge handler directly with realistic handler outputs,
+    verifying the merged dict contains everything the thesis generator needs.
+    """
+
+    # Realistic moat output (input to both parallel branches)
+    _MOAT_OUTPUT = {
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "metrics": {"revenue": 400_000_000_000, "pe_ratio": 11.0},
+        "quant_result": {"pass": True, "piotroski_f": 7},
+        "moat_score": 8,
+        "moat_type": "wide",
+        "moat_sources": ["switching costs", "intangible assets"],
+        "moat_trend": "stable",
+        "pricing_power": 7,
+        "customer_captivity": 8,
+        "reasoning": "Apple has exceptional switching costs and brand power.",
+        "risks_to_moat": ["commoditisation of smartphones"],
+        "confidence": 0.85,
+        "skipped": False,
+        "filing_context_degraded": False,
+        "cost_usd": 0.01,
+    }
+
+    # Simulated management handler output (moat output + management fields)
+    _MGMT_OUTPUT = {
+        **_MOAT_OUTPUT,
+        "management_score": 7,
+        "owner_operator_mindset": 8,
+        "capital_allocation_skill": 7,
+        "candor_transparency": 6,
+        "red_flags": [],
+        "green_flags": ["strong buyback program"],
+    }
+
+    # Simulated IV handler output (moat output + IV fields)
+    _IV_OUTPUT = {
+        **_MOAT_OUTPUT,
+        "intrinsic_value_per_share": 210.0,
+        "margin_of_safety": 0.45,
+        "buy_signal": True,
+        "scenarios": {"base": {"iv": 210}, "bull": {"iv": 260}, "bear": {"iv": 160}},
+        "dcf_per_share": 220.0,
+        "epv_per_share": 200.0,
+        "floor_per_share": 180.0,
+        "mos_threshold": 0.30,
+        "current_price": 145.0,
+    }
+
+    # All fields the thesis generator requires
+    THESIS_REQUIRED_FIELDS = [
+        "ticker",
+        "company_name",
+        "metrics",
+        "quant_result",
+        "moat_score",
+        "moat_type",
+        "moat_sources",
+        "management_score",
+        "owner_operator_mindset",
+        "capital_allocation_skill",
+        "candor_transparency",
+        "intrinsic_value_per_share",
+        "margin_of_safety",
+        "buy_signal",
+        "scenarios",
+        "dcf_per_share",
+        "epv_per_share",
+        "floor_per_share",
+        "mos_threshold",
+    ]
+
+    def test_merge_produces_all_thesis_required_fields(self):
+        """Merge of mgmt + IV outputs contains every field thesis generator needs."""
+        from analysis.merge_results.handler import handler as merge_handler
+
+        merged = merge_handler([self._MGMT_OUTPUT, self._IV_OUTPUT], None)
+
+        for field in self.THESIS_REQUIRED_FIELDS:
+            assert field in merged, f"Missing thesis-required field: {field}"
+
+    def test_merge_preserves_management_fields(self):
+        """Management-specific fields survive the merge."""
+        from analysis.merge_results.handler import handler as merge_handler
+
+        merged = merge_handler([self._MGMT_OUTPUT, self._IV_OUTPUT], None)
+
+        assert merged["management_score"] == 7
+        assert merged["owner_operator_mindset"] == 8
+        assert merged["capital_allocation_skill"] == 7
+        assert merged["candor_transparency"] == 6
+        assert merged["red_flags"] == []
+        assert merged["green_flags"] == ["strong buyback program"]
+
+    def test_merge_preserves_iv_fields(self):
+        """IV-specific fields survive the merge."""
+        from analysis.merge_results.handler import handler as merge_handler
+
+        merged = merge_handler([self._MGMT_OUTPUT, self._IV_OUTPUT], None)
+
+        assert merged["intrinsic_value_per_share"] == 210.0
+        assert merged["margin_of_safety"] == 0.45
+        assert merged["buy_signal"] is True
+        assert merged["dcf_per_share"] == 220.0
+        assert merged["epv_per_share"] == 200.0
+        assert merged["floor_per_share"] == 180.0
+        assert merged["mos_threshold"] == 0.30
+
+    def test_overlapping_passthrough_keys_are_consistent(self):
+        """Both branches pass through identical moat fields — merge is safe."""
+        from analysis.merge_results.handler import handler as merge_handler
+
+        merged = merge_handler([self._MGMT_OUTPUT, self._IV_OUTPUT], None)
+
+        assert merged["ticker"] == "AAPL"
+        assert merged["company_name"] == "Apple Inc."
+        assert merged["moat_score"] == 8
+        assert merged["metrics"] == self._MOAT_OUTPUT["metrics"]
+        assert merged["quant_result"] == self._MOAT_OUTPUT["quant_result"]
+
+    def test_single_branch_output_passes_through(self):
+        """If only one branch output exists (simulating failure), merge returns it."""
+        from analysis.merge_results.handler import handler as merge_handler
+
+        merged = merge_handler([self._MGMT_OUTPUT], None)
+        assert merged == self._MGMT_OUTPUT
+
+
 class TestQuantScreenPipeline:
     """Integration tests for the quant screen → analysis table write flow."""
 

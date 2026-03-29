@@ -64,7 +64,7 @@ focus: open-ended
 **Downsides:** Slightly more complex state machine definition. Error handling for one-branch-fails-while-other-succeeds needs design. CDK stack changes required.
 **Confidence:** 90%
 **Complexity:** Low
-**Status:** Unexplored
+**Status:** Implemented (2026-03-29)
 
 ### 7. Budget Reserve for Sell-Side Analysis (Silent Paralysis Fix)
 **Description:** Reserve 20% of the monthly LLM budget for sell-side analysis and emergency re-evaluation. When the general budget is exhausted, sell-path analysis can still run. Prevents the system from holding through a fraud revelation or thesis collapse because it literally ran out of budget to think.
