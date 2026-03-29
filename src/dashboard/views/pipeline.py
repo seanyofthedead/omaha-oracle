@@ -52,73 +52,49 @@ _STATUS_LABELS = {
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_all_candidates(analysis_date: str | None = None) -> list[dict]:
     """Load all pipeline candidates (pass and fail) from DynamoDB."""
-    try:
-        from dashboard.data import load_all_pipeline_candidates
+    from dashboard.data import load_all_pipeline_candidates
 
-        return load_all_pipeline_candidates(analysis_date=analysis_date)
-    except DataLoadError:
-        return []
-    except Exception:
-        return []
+    return load_all_pipeline_candidates(analysis_date=analysis_date)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_oracle_candidates() -> list[dict]:
     """Load Oracle pipeline candidates from DynamoDB (watchlist only)."""
-    try:
-        from dashboard.data import load_watchlist_analysis
+    from dashboard.data import load_watchlist_analysis
 
-        return load_watchlist_analysis()
-    except DataLoadError:
-        return []
-    except Exception:
-        return []
+    return load_watchlist_analysis()
 
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _fetch_run_dates() -> list[str]:
     """Load available pipeline run dates."""
-    try:
-        from dashboard.data import load_pipeline_run_dates
+    from dashboard.data import load_pipeline_run_dates
 
-        return load_pipeline_run_dates()
-    except (DataLoadError, Exception):
-        return []
+    return load_pipeline_run_dates()
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_recent_decisions(limit: int = 20) -> list[dict]:
     """Load recent Oracle buy/sell signals from DynamoDB."""
-    try:
-        from dashboard.data import load_decisions
+    from dashboard.data import load_decisions
 
-        return load_decisions(limit=limit)
-    except DataLoadError:
-        return []
-    except Exception:
-        return []
+    return load_decisions(limit=limit)
 
 
 @st.cache_data(ttl=60, show_spinner=False)
 def _fetch_held_symbols() -> set[str]:
     """Return set of currently held symbols from Alpaca."""
-    try:
-        client = get_alpaca_client()
-        positions = client.get_positions()
-        return {p.symbol for p in positions}
-    except Exception:
-        return set()
+    client = get_alpaca_client()
+    positions = client.get_positions()
+    return {p.symbol for p in positions}
 
 
 @st.cache_data(ttl=60, show_spinner=False)
 def _fetch_pending_symbols() -> set[str]:
     """Return set of symbols with open orders."""
-    try:
-        client = get_alpaca_client()
-        orders = client.get_orders(status="open", limit=100)
-        return {o.symbol for o in orders}
-    except Exception:
-        return set()
+    client = get_alpaca_client()
+    orders = client.get_orders(status="open", limit=100)
+    return {o.symbol for o in orders}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -194,8 +170,17 @@ def render() -> None:
     """Render the Watchlist & Pipeline tab."""
     st.header("Watchlist & Pipeline")
 
-    held = _fetch_held_symbols()
-    pending = _fetch_pending_symbols()
+    try:
+        held = _fetch_held_symbols()
+    except Exception:
+        st.error("Failed to load held positions from Alpaca.")
+        held = set()
+
+    try:
+        pending = _fetch_pending_symbols()
+    except Exception:
+        st.error("Failed to load pending orders from Alpaca.")
+        pending = set()
 
     tabs = st.tabs(
         [
@@ -209,7 +194,11 @@ def render() -> None:
     tab_pipeline, tab_all_candidates, tab_run, tab_watchlists, tab_signals = tabs
 
     with tab_pipeline:
-        candidates = _fetch_oracle_candidates()
+        try:
+            candidates = _fetch_oracle_candidates()
+        except (DataLoadError, Exception) as exc:
+            st.error(f"Failed to load pipeline candidates: {exc}")
+            candidates = []
         _render_pipeline(candidates, held, pending)
 
     with tab_all_candidates:
@@ -228,7 +217,12 @@ def render() -> None:
 def _render_all_candidates(held: set[str], pending: set[str]) -> None:
     """Render all scanned candidates with funnel and detailed table."""
     # Date selector
-    run_dates = _fetch_run_dates()
+    try:
+        run_dates = _fetch_run_dates()
+    except (DataLoadError, Exception) as exc:
+        st.error(f"Failed to load run dates: {exc}")
+        run_dates = []
+
     selected_date: str | None = None
     if run_dates:
         date_options = ["Latest"] + run_dates
@@ -240,7 +234,11 @@ def _render_all_candidates(held: set[str], pending: set[str]) -> None:
         if choice != "Latest":
             selected_date = choice
 
-    candidates = _fetch_all_candidates(analysis_date=selected_date)
+    try:
+        candidates = _fetch_all_candidates(analysis_date=selected_date)
+    except (DataLoadError, Exception) as exc:
+        st.error(f"Failed to load candidates: {exc}")
+        candidates = []
 
     if not candidates:
         st.info(
@@ -746,7 +744,11 @@ def _render_watchlists() -> None:
 
 def _render_signals() -> None:
     """Render recent Oracle BUY/SELL signals."""
-    decisions = _fetch_recent_decisions()
+    try:
+        decisions = _fetch_recent_decisions()
+    except (DataLoadError, Exception) as exc:
+        st.error(f"Failed to load recent signals: {exc}")
+        decisions = []
 
     if not decisions:
         st.info("No recent signals from the Oracle analysis pipeline.")

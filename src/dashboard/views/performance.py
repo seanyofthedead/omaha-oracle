@@ -26,16 +26,13 @@ from dashboard.fmt import fmt_currency, fmt_pct
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_portfolio_history(period: str, timeframe: str) -> dict | None:
     client = get_alpaca_client()
-    try:
-        h = client.get_portfolio_history(period=period, timeframe=timeframe)
-        return {
-            "timestamps": h.timestamps,
-            "equity": h.equity,
-            "profit_loss_pct": h.profit_loss_pct,
-            "base_value": h.base_value,
-        }
-    except Exception:
-        return None
+    h = client.get_portfolio_history(period=period, timeframe=timeframe)
+    return {
+        "timestamps": h.timestamps,
+        "equity": h.equity,
+        "profit_loss_pct": h.profit_loss_pct,
+        "base_value": h.base_value,
+    }
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -64,18 +61,15 @@ def _fetch_closed_orders() -> list[dict]:
 @st.cache_data(ttl=600, show_spinner=False)
 def _fetch_spy_data(start_date: str) -> dict | None:
     """Fetch SPY price data for benchmark comparison."""
-    try:
-        import yfinance as yf
+    import yfinance as yf
 
-        spy = yf.download("SPY", start=start_date, progress=False)
-        if spy.empty:
-            return None
-        closes = spy["Close"].dropna()
-        dates = [d.strftime("%Y-%m-%d") for d in closes.index]
-        values = closes.tolist()
-        return {"dates": dates, "values": values}
-    except Exception:
+    spy = yf.download("SPY", start=start_date, progress=False)
+    if spy.empty:
         return None
+    closes = spy["Close"].dropna()
+    dates = [d.strftime("%Y-%m-%d") for d in closes.index]
+    values = closes.tolist()
+    return {"dates": dates, "values": values}
 
 
 # ── Render ───────────────────────────────────────────────────────────────
@@ -104,7 +98,10 @@ def render() -> None:
     period, timeframe = period_map[selected]
 
     # ── Fetch data ───────────────────────────────────────────────────
-    raw_history = _fetch_portfolio_history(period, timeframe)
+    try:
+        raw_history = _fetch_portfolio_history(period, timeframe)
+    except Exception:
+        raw_history = None
 
     if raw_history is None or not raw_history["timestamps"]:
         st.info("No portfolio history available. Start trading to see performance metrics.")
@@ -178,7 +175,10 @@ def render() -> None:
     # SPY benchmark
     if df is not None and len(df) > 0:
         start_str = df["date"].iloc[0].strftime("%Y-%m-%d")
-        spy_data = _fetch_spy_data(start_str)
+        try:
+            spy_data = _fetch_spy_data(start_str)
+        except Exception:
+            spy_data = None
         if spy_data and spy_data["values"]:
             spy_vals = spy_data["values"]
             first = spy_vals[0] if isinstance(spy_vals[0], (int, float)) else float(spy_vals[0])

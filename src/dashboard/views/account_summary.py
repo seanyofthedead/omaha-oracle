@@ -40,16 +40,13 @@ def _fetch_account() -> dict:
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_equity_history(period: str, timeframe: str) -> dict | None:
     client = get_alpaca_client()
-    try:
-        h = client.get_portfolio_history(period=period, timeframe=timeframe)
-        return {
-            "timestamps": h.timestamps,
-            "equity": h.equity,
-            "profit_loss_pct": h.profit_loss_pct,
-            "base_value": h.base_value,
-        }
-    except Exception:
-        return None
+    h = client.get_portfolio_history(period=period, timeframe=timeframe)
+    return {
+        "timestamps": h.timestamps,
+        "equity": h.equity,
+        "profit_loss_pct": h.profit_loss_pct,
+        "base_value": h.base_value,
+    }
 
 
 # ── Render ───────────────────────────────────────────────────────────────
@@ -99,7 +96,10 @@ def render() -> None:
     )
 
     period, timeframe = period_map[selected]
-    raw = _fetch_equity_history(period, timeframe)
+    try:
+        raw = _fetch_equity_history(period, timeframe)
+    except Exception:
+        raw = None
 
     if raw is None or not raw["timestamps"]:
         st.info("No portfolio history available for this period.")

@@ -65,8 +65,9 @@ class TestWebCandidateStore:
         store = WebCandidateStore(table_name=TABLE_NAME)
         candidates = [_make_candidate("AAPL"), _make_candidate("GOOG", score=0.9)]
 
-        stored = store.store_candidates(candidates)
+        stored, failed = store.store_candidates(candidates)
         assert stored == 2
+        assert failed == 0
 
         retrieved = store.get_top_candidates(limit=10)
         tickers = {c.ticker for c in retrieved}
@@ -110,8 +111,9 @@ class TestWebCandidateStore:
     def test_store_handles_none_fields(self, web_candidates_table):
         store = WebCandidateStore(table_name=TABLE_NAME)
         candidate = _make_candidate("AAPL", market_cap=None)
-        stored = store.store_candidates([candidate])
+        stored, failed = store.store_candidates([candidate])
         assert stored == 1
+        assert failed == 0
 
     def test_get_source_stats(self, web_candidates_table):
         store = WebCandidateStore(table_name=TABLE_NAME)
