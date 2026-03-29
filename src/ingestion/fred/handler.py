@@ -82,7 +82,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         )
         return series_id
 
-    with ThreadPoolExecutor(max_workers=len(MACRO_SERIES)) as ex:
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures = {ex.submit(_fetch_and_store, sid): sid for sid in MACRO_SERIES}
         for fut in as_completed(futures):
             sid = futures[fut]

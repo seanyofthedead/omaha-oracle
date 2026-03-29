@@ -21,7 +21,11 @@ Revised source list (all verified scrapable):
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
+
+from ingestion.web_sources.models import WebCandidate
+from shared.firecrawl_client import FirecrawlClient
 
 from .base import SchemaWebSource
 from .registry import SourceRegistry
@@ -111,6 +115,56 @@ class SECEdgarFullText(SchemaWebSource):
         "of the relevant text mentioning undervaluation or intrinsic value."
     )
     default_confidence = 0.5
+
+    def _resolve_url(self) -> str:
+        """Format the URL template with today's date range (last 7 days)."""
+        end = date.today()
+        start = end - timedelta(days=7)
+        return self.url.format(start_date=start.isoformat(), end_date=end.isoformat())
+
+    def scrape(self, client: FirecrawlClient) -> list[WebCandidate]:
+        """Override to interpolate date placeholders before calling Firecrawl."""
+        resolved_url = self._resolve_url()
+        result = client.scrape_extract(
+            url=resolved_url,
+            schema=self.extraction_schema(),
+            prompt=self.extraction_prompt,
+            wait_for=self.wait_for,
+            headers=self.headers,
+            proxy=self.proxy,
+        )
+
+        raw_json = result.get("json") or result.get("extract") or {}
+        stocks = raw_json.get("stocks", []) if isinstance(raw_json, dict) else []
+        stocks = self.post_process(stocks)
+
+        candidates: list[WebCandidate] = []
+        for rec in stocks:
+            raw_ticker = rec.get("ticker")
+            if not isinstance(raw_ticker, str) or not raw_ticker.strip():
+                continue
+            ticker = raw_ticker.strip().upper()
+            try:
+                candidates.append(
+                    WebCandidate(
+                        ticker=ticker,
+                        source=self.name,
+                        signal_type=self.signal_type,
+                        confidence=self.default_confidence,
+                        sector=rec.get("sector"),
+                        market_cap=rec.get("market_cap"),
+                        pe_ratio=rec.get("pe_ratio"),
+                        price=rec.get("price"),
+                        extra={
+                            k: v
+                            for k, v in rec.items()
+                            if k not in {"ticker", "sector", "market_cap", "pe_ratio", "price"}
+                        },
+                    )
+                )
+            except (ValueError, TypeError):
+                continue
+        return candidates
 
     def extraction_schema(self) -> dict[str, Any]:
         return {
@@ -313,6 +367,56 @@ class SEC13FFilings(SchemaWebSource):
         "and reported value if available."
     )
     default_confidence = 0.55
+
+    def _resolve_url(self) -> str:
+        """Format the URL template with today's date range (last 30 days for 13F)."""
+        end = date.today()
+        start = end - timedelta(days=30)
+        return self.url.format(start_date=start.isoformat(), end_date=end.isoformat())
+
+    def scrape(self, client: FirecrawlClient) -> list[WebCandidate]:
+        """Override to interpolate date placeholders before calling Firecrawl."""
+        resolved_url = self._resolve_url()
+        result = client.scrape_extract(
+            url=resolved_url,
+            schema=self.extraction_schema(),
+            prompt=self.extraction_prompt,
+            wait_for=self.wait_for,
+            headers=self.headers,
+            proxy=self.proxy,
+        )
+
+        raw_json = result.get("json") or result.get("extract") or {}
+        stocks = raw_json.get("stocks", []) if isinstance(raw_json, dict) else []
+        stocks = self.post_process(stocks)
+
+        candidates: list[WebCandidate] = []
+        for rec in stocks:
+            raw_ticker = rec.get("ticker")
+            if not isinstance(raw_ticker, str) or not raw_ticker.strip():
+                continue
+            ticker = raw_ticker.strip().upper()
+            try:
+                candidates.append(
+                    WebCandidate(
+                        ticker=ticker,
+                        source=self.name,
+                        signal_type=self.signal_type,
+                        confidence=self.default_confidence,
+                        sector=rec.get("sector"),
+                        market_cap=rec.get("market_cap"),
+                        pe_ratio=rec.get("pe_ratio"),
+                        price=rec.get("price"),
+                        extra={
+                            k: v
+                            for k, v in rec.items()
+                            if k not in {"ticker", "sector", "market_cap", "pe_ratio", "price"}
+                        },
+                    )
+                )
+            except (ValueError, TypeError):
+                continue
+        return candidates
 
     def extraction_schema(self) -> dict[str, Any]:
         return {
