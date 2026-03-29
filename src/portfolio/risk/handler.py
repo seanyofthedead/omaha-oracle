@@ -84,7 +84,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Analysis consistency (BUY only)
         consistency_ok = True
         if signal == "BUY":
-            quant_passed = action.get("quant_screen_passed", True)
+            quant_passed = action.get("quant_screen_passed", False)
             if "payload" in action and isinstance(action["payload"], dict):
                 quant_passed = action["payload"].get("quant_passed", quant_passed)
             moat = safe_int(action.get("moat_score", 0))

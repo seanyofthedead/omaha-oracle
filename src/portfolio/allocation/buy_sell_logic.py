@@ -75,7 +75,14 @@ def evaluate_buy(
     cash = safe_float(portfolio_state.get("cash_available", 0))
     portfolio_value = safe_float(portfolio_state.get("portfolio_value", 0))
     if cash > 0 and portfolio_value > 0:
-        reasons_pass.append(f"Cash ${cash:,.0f} available")
+        cash_pct = cash / portfolio_value
+        if cash_pct < 0.10:
+            reasons_fail.append(
+                f"Cash reserve {cash_pct:.1%} below minimum 10% "
+                f"(${cash:,.0f} / ${portfolio_value:,.0f})"
+            )
+        else:
+            reasons_pass.append(f"Cash ${cash:,.0f} available ({cash_pct:.1%})")
     else:
         reasons_fail.append("No cash available")
 

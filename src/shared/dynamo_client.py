@@ -109,8 +109,15 @@ class DynamoClient:
             )
             raise
 
-    def put_item_if_not_exists(self, item: Item) -> bool:
+    def put_item_if_not_exists(self, item: Item, pk_attr: str = "pk") -> bool:
         """Write *item* only if an item with the same primary key does not exist.
+
+        Parameters
+        ----------
+        pk_attr:
+            Name of the partition key attribute.  Defaults to ``"pk"`` for
+            tables that use that convention.  Pass the actual PK attribute
+            name (e.g. ``"decision_id"``) for tables with different schemas.
 
         Returns
         -------
@@ -118,7 +125,7 @@ class DynamoClient:
             ``True`` if the item was written; ``False`` if it already existed.
         """
         try:
-            self.put_item(item, condition_expression="attribute_not_exists(pk)")
+            self.put_item(item, condition_expression=f"attribute_not_exists({pk_attr})")
             return True
         except ItemExistsError:
             return False

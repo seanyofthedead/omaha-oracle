@@ -217,3 +217,47 @@ class TestValidateAnalysisConsistency:
             )
             is True
         )
+
+
+class TestCashReserve:
+    """Bug #5: Cash reserve 10% minimum must be enforced in guardrails AND buy_sell_logic."""
+
+    def test_cash_below_10_pct_fails_guardrails(self):
+        """Cash at 5% of portfolio should fail the cash reserve check."""
+        proposed = {
+            "signal": "BUY",
+            "side": "buy",
+            "position_size_usd": 5_000,
+            "sector": "Tech",
+            "asset_type": "equity",
+        }
+        portfolio_state = {
+            "portfolio_value": 100_000,
+            "cash_available": 5_000,  # 5% < 10% minimum
+            "positions": [],
+            "sector_exposure": {},
+        }
+        budget_status = {"exhausted": False}
+        result = check_all_guardrails(proposed, portfolio_state, budget_status)
+        assert result["passed"] is False
+        assert any("cash reserve" in v.lower() or "Cash reserve" in v for v in result["violations"])
+
+    def test_cash_at_10_pct_passes(self):
+        """Cash at exactly 10% should pass."""
+        proposed = {
+            "signal": "BUY",
+            "side": "buy",
+            "position_size_usd": 5_000,
+            "sector": "Tech",
+            "asset_type": "equity",
+        }
+        portfolio_state = {
+            "portfolio_value": 100_000,
+            "cash_available": 10_000,  # exactly 10%
+            "positions": [],
+            "sector_exposure": {},
+        }
+        budget_status = {"exhausted": False}
+        result = check_all_guardrails(proposed, portfolio_state, budget_status)
+        # 10% is not below 10%, so should pass cash reserve check
+        assert not any("cash reserve" in v.lower() for v in result["violations"])
