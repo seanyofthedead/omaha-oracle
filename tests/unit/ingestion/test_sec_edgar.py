@@ -55,6 +55,10 @@ class TestSecEdgarHandler:
 
         with (
             patch("ingestion.sec_edgar.handler._fetch_json", side_effect=self._mock_fetch_json),
+            patch(
+                "ingestion.sec_edgar.handler._get_ticker_to_cik",
+                return_value={"AAPL": "0000320193"},
+            ),
             patch("ingestion.sec_edgar.handler.DynamoClient") as mock_dynamo_cls,
             patch("ingestion.sec_edgar.handler.S3Client") as mock_s3_cls,
         ):
@@ -78,6 +82,7 @@ class TestSecEdgarHandler:
 
         with (
             patch("ingestion.sec_edgar.handler._fetch_json", return_value={}),
+            patch("ingestion.sec_edgar.handler._get_ticker_to_cik", return_value={}),
             patch("ingestion.sec_edgar.handler.DynamoClient"),
             patch("ingestion.sec_edgar.handler.S3Client"),
         ):
@@ -95,6 +100,7 @@ class TestSecEdgarHandler:
 
         with (
             patch("ingestion.sec_edgar.handler._fetch_json", return_value={}),
+            patch("ingestion.sec_edgar.handler._get_ticker_to_cik", return_value={}),
             patch("ingestion.sec_edgar.handler.DynamoClient"),
             patch("ingestion.sec_edgar.handler.S3Client"),
         ):

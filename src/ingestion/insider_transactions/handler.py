@@ -8,6 +8,7 @@ Stores raw filing data to S3 and flags significant insider buys (> $100K).
 from __future__ import annotations
 
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
@@ -21,6 +22,7 @@ from shared.dynamo_client import get_watchlist_tickers
 from shared.http_client import TIMEOUT, get_session
 from shared.logger import get_logger
 from shared.s3_client import S3Client
+from shared.sec_client import get_ticker_to_cik as _get_ticker_to_cik
 
 _log = get_logger(__name__)
 
@@ -31,9 +33,20 @@ RATE_LIMIT_SLEEP = 0.15  # 150ms between requests
 SIGNIFICANT_BUY_THRESHOLD = 100_000  # USD
 LOOKBACK_DAYS = 30
 
+# Module-level lock ensures SEC rate limiting is global, not per-thread.
+# Without this, 10 ThreadPoolExecutor threads would burst 10x against SEC.
+_rate_lock = threading.Lock()
+_last_request_time = 0.0
+
 
 def _rate_limit() -> None:
-    time.sleep(RATE_LIMIT_SLEEP)
+    global _last_request_time
+    with _rate_lock:
+        now = time.monotonic()
+        elapsed = now - _last_request_time
+        if elapsed < RATE_LIMIT_SLEEP:
+            time.sleep(RATE_LIMIT_SLEEP - elapsed)
+        _last_request_time = time.monotonic()
 
 
 def _cik_pad(cik: int | str) -> str:
@@ -50,19 +63,6 @@ def _fetch(url: str, headers: dict[str, str]) -> requests.Response:
 def _fetch_json(url: str, headers: dict[str, str]) -> dict[str, Any]:
     result: dict[str, Any] = _fetch(url, headers).json()
     return result
-
-
-def _get_ticker_to_cik(user_agent: str) -> dict[str, str]:
-    """Build ticker → CIK map from SEC company_tickers.json."""
-    data = _fetch_json(f"{SEC_FILES}/company_tickers.json", {"User-Agent": user_agent})
-    out: dict[str, str] = {}
-    for entry in data.values():
-        if isinstance(entry, dict):
-            ticker = entry.get("ticker")
-            cik = entry.get("cik_str") or entry.get("cik")
-            if ticker and cik is not None:
-                out[str(ticker).upper()] = _cik_pad(cik)
-    return out
 
 
 def _accn_to_path(accn: str) -> str:

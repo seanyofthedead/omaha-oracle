@@ -54,6 +54,10 @@ class TestInsiderTransactionsHandler:
                 return_value=["AAPL"],
             ),
             patch(
+                "ingestion.insider_transactions.handler._get_ticker_to_cik",
+                return_value={"AAPL": "0000320193"},
+            ),
+            patch(
                 "ingestion.insider_transactions.handler._fetch_json", side_effect=_mock_fetch_json
             ),
             patch("ingestion.insider_transactions.handler._fetch", return_value=mock_resp),
@@ -77,6 +81,7 @@ class TestInsiderTransactionsHandler:
 
         with (
             patch("ingestion.insider_transactions.handler.get_watchlist_tickers", return_value=[]),
+            patch("ingestion.insider_transactions.handler._get_ticker_to_cik", return_value={}),
             patch("ingestion.insider_transactions.handler._fetch_json", return_value={}),
             patch("ingestion.insider_transactions.handler.S3Client"),
         ):
@@ -101,6 +106,7 @@ class TestInsiderTransactionsHandler:
                 "ingestion.insider_transactions.handler.get_watchlist_tickers",
                 return_value=["FAKE1", "FAKE2"],
             ),
+            patch("ingestion.insider_transactions.handler._get_ticker_to_cik", return_value={}),
             patch("ingestion.insider_transactions.handler._fetch_json", return_value={}),
             patch("ingestion.insider_transactions.handler.S3Client"),
         ):

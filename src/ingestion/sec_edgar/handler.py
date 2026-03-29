@@ -19,6 +19,7 @@ from shared.dynamo_client import DynamoClient, get_watchlist_tickers
 from shared.http_client import TIMEOUT, get_session
 from shared.logger import get_logger
 from shared.s3_client import S3Client
+from shared.sec_client import get_ticker_to_cik as _get_ticker_to_cik
 
 _log = get_logger(__name__)
 
@@ -73,21 +74,6 @@ def _fetch_json(url: str, headers: dict[str, str]) -> dict[str, Any]:
     resp.raise_for_status()
     result: dict[str, Any] = resp.json()
     return result
-
-
-def _get_ticker_to_cik(user_agent: str) -> dict[str, str]:
-    """Fetch SEC company_tickers.json and build ticker → CIK map."""
-    url = f"{SEC_FILES}/company_tickers.json"
-    headers = {"User-Agent": user_agent}
-    data = _fetch_json(url, headers)
-    out: dict[str, str] = {}
-    for entry in data.values():
-        if isinstance(entry, dict):
-            ticker = entry.get("ticker")
-            cik = entry.get("cik_str") or entry.get("cik")
-            if ticker and cik is not None:
-                out[str(ticker).upper()] = _cik_pad(cik)
-    return out
 
 
 def _extract_annual_facts(
