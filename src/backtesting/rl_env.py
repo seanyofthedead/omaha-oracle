@@ -107,9 +107,8 @@ class TradingEnv(gym.Env):
             self.entry_price = 0.0
             self.trades.append({"step": self.current_step, "action": "SELL", "price": float(price)})
 
+        pv_after = self.cash + self.shares * price
         self.current_step += 1
-        next_price = self.prices[min(self.current_step, len(self.prices) - 1)]
-        pv_after = self.cash + self.shares * next_price
         self.portfolio_values.append(pv_after)
 
         daily_ret = (pv_after / pv_before - 1) if pv_before > 0 else 0

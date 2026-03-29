@@ -2,10 +2,39 @@
 
 from __future__ import annotations
 
+import logging
 import math
-from typing import Any
+from typing import Any, TypedDict
 
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
+
+
+class BacktestMetrics(TypedDict):
+    """Structural contract for backtest metrics."""
+
+    total_return_pct: float
+    spy_return_pct: float
+    alpha_pct: float
+    max_drawdown_pct: float
+    win_rate_pct: float
+    total_trades: int
+    open_positions: int
+    sharpe_ratio: float
+    sortino_ratio: float
+    calmar_ratio: float
+    avg_trade_return_pct: float
+
+
+class BacktestResult(TypedDict):
+    """Structural contract for the full backtest result."""
+
+    dates: list[str]
+    portfolio_values: list[float]
+    spy_values: list[float]
+    trades: list[dict[str, Any]]
+    metrics: BacktestMetrics
 
 
 def run_backtest(
@@ -54,8 +83,10 @@ def run_backtest(
             auto_adjust=True,
         )
         if prices.empty:
+            logger.warning("yfinance returned empty price data for tickers=%s start=%s", tickers_with_spy, start_date)
             return _empty_result()
     except Exception:
+        logger.exception("yfinance download failed for tickers=%s start=%s", tickers_with_spy, start_date)
         return _empty_result()
 
     # Extract close prices
@@ -250,7 +281,7 @@ def _compute_enhanced_metrics(
     # Sortino ratio (downside deviation only)
     downside_sq = [r**2 for r in daily_returns if r < 0]
     if downside_sq:
-        downside_dev = math.sqrt(sum(downside_sq) / len(daily_returns))
+        downside_dev = math.sqrt(sum(downside_sq) / len(downside_sq))
         sortino_ratio = (
             (mean_ret / downside_dev) * math.sqrt(trading_days) if downside_dev > 0 else 0.0
         )

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import math
 import tempfile
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from backtesting.engine import _compute_enhanced_metrics
+from backtesting.engine import _compute_enhanced_metrics, _empty_result, run_backtest
 from backtesting.rl_env import TradingEnv
 from backtesting.rl_train import generate_gbm_prices, train
 
@@ -64,6 +67,205 @@ class TestEnhancedMetrics:
         values = [100.0 + i for i in range(100)]
         _, _, calmar, _ = _compute_enhanced_metrics(values, [], 0.0)
         assert calmar == 0.0
+
+
+# ── Sortino denominator fix ──────────────────────────────────────────
+
+
+class TestSortinoDenominator:
+    """Sortino ratio must divide by count of downside days, not total days."""
+
+    def test_sortino_known_reference(self):
+        """Compute Sortino by hand and verify the engine matches.
+
+        Construct a 6-day portfolio: [100, 102, 101, 103, 100, 105]
+        Daily returns: [0.02, -0.0098..., 0.0198..., -0.0291..., 0.05]
+        Downside returns (< 0): [-0.0098, -0.0291]  (2 of 5)
+        downside_sq sum = 0.0098^2 + 0.0291^2
+        BUG: old code divides by 5 (total days)
+        FIX: divide by 2 (downside-only days)
+        """
+        values = [100.0, 102.0, 101.0, 103.0, 100.0, 105.0]
+        daily_returns = [values[i] / values[i - 1] - 1 for i in range(1, len(values))]
+        mean_ret = sum(daily_returns) / len(daily_returns)
+
+        downside = [r for r in daily_returns if r < 0]
+        downside_sq = [r**2 for r in downside]
+        # Correct: divide by len(downside_sq) = 2
+        correct_dd = math.sqrt(sum(downside_sq) / len(downside_sq))
+        correct_sortino = (mean_ret / correct_dd) * math.sqrt(252)
+
+        _, sortino, _, _ = _compute_enhanced_metrics(values, [], 5.0)
+        assert sortino == pytest.approx(correct_sortino, rel=1e-6)
+
+    def test_sortino_not_diluted_by_total_days(self):
+        """With many positive days and few negative, Sortino should be large.
+
+        If denominator wrongly uses total days, it dilutes the downside dev
+        and inflates Sortino less than the correct formula.
+        """
+        # 100 up-days, 2 down-days
+        values = [100.0]
+        for _ in range(98):
+            values.append(values[-1] * 1.002)  # +0.2% up
+        values.append(values[-1] * 0.995)  # -0.5% down
+        values.append(values[-1] * 0.995)  # -0.5% down
+
+        daily_returns = [values[i] / values[i - 1] - 1 for i in range(1, len(values))]
+        mean_ret = sum(daily_returns) / len(daily_returns)
+        downside = [r for r in daily_returns if r < 0]
+        downside_sq = [r**2 for r in downside]
+
+        # Correct denominator: only 2 downside days
+        correct_dd = math.sqrt(sum(downside_sq) / len(downside_sq))
+        correct_sortino = (mean_ret / correct_dd) * math.sqrt(252)
+
+        # Wrong denominator would use 100 total days -> much smaller dd -> different sortino
+        wrong_dd = math.sqrt(sum(downside_sq) / len(daily_returns))
+        wrong_sortino = (mean_ret / wrong_dd) * math.sqrt(252)
+
+        _, sortino, _, _ = _compute_enhanced_metrics(values, [], 5.0)
+        assert sortino == pytest.approx(correct_sortino, rel=1e-6)
+        assert sortino != pytest.approx(wrong_sortino, rel=1e-2)
+
+
+# ── Silent except logging ───────────────────────────────────────────
+
+
+class TestYfinanceFailureLogging:
+    """yfinance download failures must be logged, not swallowed silently."""
+
+    def test_yfinance_exception_is_logged(self):
+        """When yfinance.download raises, the exception should be logged."""
+        decisions = [
+            {"ticker": "AAPL", "signal": "BUY", "timestamp": "2024-01-02"},
+        ]
+        with patch("backtesting.engine.yf.download", side_effect=RuntimeError("API down")):
+            with patch("backtesting.engine.logger") as mock_logger:
+                result = run_backtest(decisions)
+        # Should still return empty result
+        assert result["trades"] == []
+        # But should have logged the error
+        mock_logger.exception.assert_called_once()
+
+    def test_empty_prices_is_logged(self):
+        """When yfinance returns empty DataFrame, it should be logged."""
+        import pandas as pd
+
+        decisions = [
+            {"ticker": "AAPL", "signal": "BUY", "timestamp": "2024-01-02"},
+        ]
+        with patch("backtesting.engine.yf.download", return_value=pd.DataFrame()):
+            with patch("backtesting.engine.logger") as mock_logger:
+                result = run_backtest(decisions)
+        assert result["trades"] == []
+        mock_logger.warning.assert_called_once()
+
+
+# ── RL reward look-ahead fix ────────────────────────────────────────
+
+
+class TestRLRewardNoLookahead:
+    """RL reward must use the current step's price, not the next step's."""
+
+    def test_hold_reward_uses_current_price(self):
+        """After a HOLD, pv_after should use the pre-increment step price."""
+        # Create prices where step 20 = 100, step 21 = 200 (huge jump)
+        prices = np.full(50, 100.0)
+        prices[21] = 200.0  # future price - should NOT leak into reward
+
+        env = TradingEnv(prices, initial_capital=100_000.0)
+        env.reset(seed=42)
+        assert env.current_step == 20
+
+        # HOLD at step 20 (price=100). After step, current_step becomes 21.
+        # pv_after should use price at step 20 (100), NOT step 21 (200)
+        _, reward, _, _, info = env.step(0)
+
+        # With no position (all cash), pv should equal initial capital regardless
+        # But if there IS a position, the bug would be visible.
+        # Let's test with a position instead.
+
+    def test_buy_then_hold_no_future_leak(self):
+        """Buy, then hold. Reward on hold should not use next step's price."""
+        prices = np.full(50, 100.0)
+        prices[22] = 200.0  # big jump at step 22
+
+        env = TradingEnv(prices, initial_capital=100_000.0)
+        env.reset(seed=42)
+        assert env.current_step == 20
+
+        # BUY at step 20 (price=100)
+        env.step(1)
+        shares = env.shares
+        assert shares > 0
+        # After BUY, current_step = 21, price[21] = 100
+
+        # HOLD at step 21 (price=100). Next price is step 22 = 200.
+        # BUG: old code uses price[22]=200 for pv_after -> reward > 0
+        # FIX: uses price[21]=100 for pv_after -> reward ~ 0
+        _, reward, _, _, info = env.step(0)
+
+        # With the fix, pv_after uses price at step 21 (100), same as pv_before
+        # So daily_ret should be ~0, reward ~0
+        assert abs(reward) < 0.01, (
+            f"Reward {reward} is too large; likely using future price (look-ahead bug)"
+        )
+
+    def test_portfolio_value_recorded_at_current_step(self):
+        """Portfolio values list should reflect price at the step just acted on."""
+        prices = np.linspace(100, 110, 50)  # smooth uptrend
+        env = TradingEnv(prices, initial_capital=100_000.0)
+        env.reset(seed=42)
+
+        # BUY
+        env.step(1)
+        # HOLD
+        env.step(0)
+
+        # pv recorded should use price[current_step] BEFORE increment
+        # After BUY at step 20, pv uses price[20]
+        # After HOLD at step 21, pv uses price[21]
+        # NOT price[22]
+        pv = env.portfolio_values[-1]
+        expected_price = prices[21]  # step we just acted on
+        expected_pv = env.cash + env.shares * expected_price
+        assert pv == pytest.approx(expected_pv, rel=1e-6)
+
+
+# ── TypedDict contracts ─────────────────────────────────────────────
+
+
+class TestTypedDictContracts:
+    """run_backtest and _empty_result should return typed dicts."""
+
+    def test_empty_result_has_typed_keys(self):
+        """_empty_result should return a BacktestResult with all required keys."""
+        from backtesting.engine import BacktestMetrics, BacktestResult
+
+        result = _empty_result()
+        # Verify all BacktestResult keys are present
+        assert "dates" in result
+        assert "portfolio_values" in result
+        assert "spy_values" in result
+        assert "trades" in result
+        assert "metrics" in result
+
+    def test_backtest_result_type_exists(self):
+        """BacktestResult TypedDict should be importable."""
+        from backtesting.engine import BacktestResult
+
+        # Check it has the right annotations
+        assert "dates" in BacktestResult.__annotations__
+        assert "metrics" in BacktestResult.__annotations__
+
+    def test_backtest_metrics_type_exists(self):
+        """BacktestMetrics TypedDict should be importable."""
+        from backtesting.engine import BacktestMetrics
+
+        assert "total_return_pct" in BacktestMetrics.__annotations__
+        assert "sharpe_ratio" in BacktestMetrics.__annotations__
+        assert "sortino_ratio" in BacktestMetrics.__annotations__
 
 
 # ── RL Environment ───────────────────────────────────────────────────
