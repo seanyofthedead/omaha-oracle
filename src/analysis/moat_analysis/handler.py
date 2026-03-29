@@ -176,31 +176,10 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             temperature=0.2,
             require_json=True,
         )
-    except Exception as exc:
+    except Exception:
         _log.exception("Moat analysis LLM failed", extra={"ticker": ticker})
-        result = dict(result_base)
-        result.update(
-            {
-                "moat_score": 0,
-                "moat_type": "uncertain",
-                "moat_sources": [],
-                "moat_trend": "uncertain",
-                "pricing_power": 0,
-                "customer_captivity": 0,
-                "reasoning": "Analysis failed — see CloudWatch logs for details",
-                "risks_to_moat": [],
-                "confidence": 0.0,
-                "skipped": False,
-                "error": type(exc).__name__,
-            }
-        )
-        store_analysis_result(
-            cfg.table_analysis,
-            ticker,
-            "moat_analysis",
-            result,
-            result.get("moat_score", 0) >= 6,
-        )
+        # Do NOT store a zero-score result here — it would be misleading
+        # during retry.  Only store on the success path below.
         raise
 
     content = response.get("content", {})

@@ -13,6 +13,26 @@ from decimal import Decimal
 from typing import Any
 
 
+MAINTENANCE_CAPEX_FACTOR = 0.7
+"""Fraction of reported capex assumed to be maintenance (vs. growth) capex.
+
+Used in the Buffett-style owner-earnings calculation.  The 0.7 estimate
+follows the heuristic that ~70 % of capex is required just to maintain
+current earning power.
+"""
+
+
+def compute_owner_earnings(ni: float, dep: float, capex: float) -> float:
+    """Compute Buffett-style owner earnings.
+
+    ``owner_earnings = net_income + depreciation - maintenance_capex``
+
+    where *maintenance_capex* is estimated as
+    ``MAINTENANCE_CAPEX_FACTOR * capex``.
+    """
+    return ni + dep - MAINTENANCE_CAPEX_FACTOR * capex
+
+
 def safe_float(val: Any, default: float = 0.0) -> float:
     """Convert *val* to float, returning *default* on failure.
 

@@ -9,7 +9,7 @@ from typing import Any
 
 from boto3.dynamodb.conditions import Key
 
-from shared.converters import safe_float
+from shared.converters import compute_owner_earnings, safe_float
 from shared.dynamo_client import DynamoClient
 from shared.logger import get_logger
 
@@ -60,7 +60,7 @@ def screen_company(
     ca = fy.get("current_assets", 0.0)
     tl = fy.get("total_liabilities", 0.0)
 
-    owner_earnings = ni + dep - 0.7 * capex
+    owner_earnings = compute_owner_earnings(ni, dep, capex)
     epv = owner_earnings / WACC_APPROX if WACC_APPROX else 0
     nnwc = ca - tl
     graham_num = math.sqrt(GRAHAM_MULTIPLIER * eps * bvps) if eps > 0 and bvps > 0 else 0.0
@@ -131,7 +131,22 @@ def screen_company(
     fcf_ok = positive_fcf_years >= fcf_min
     piot_ok = piotroski >= piot_min
 
-    passed = pe_ok and pb_ok and de_ok and roic_ok and fcf_ok and piot_ok
+    # Build failed_criteria list so callers don't need to re-derive thresholds
+    failed_criteria: list[str] = []
+    if not pe_ok:
+        failed_criteria.append("pe")
+    if not pb_ok:
+        failed_criteria.append("pb")
+    if not de_ok:
+        failed_criteria.append("debt_equity")
+    if not roic_ok:
+        failed_criteria.append("roic")
+    if not fcf_ok:
+        failed_criteria.append("positive_fcf_years")
+    if not piot_ok:
+        failed_criteria.append("piotroski")
+
+    passed = len(failed_criteria) == 0
 
     _log.debug(
         "quant_screen result",
@@ -150,8 +165,10 @@ def screen_company(
             "piotroski": piotroski,
             "piot_ok": piot_ok,
             "passed": passed,
+            "failed_criteria": failed_criteria,
         },
     )
 
     result["pass"] = passed
+    result["failed_criteria"] = failed_criteria
     return result, passed
