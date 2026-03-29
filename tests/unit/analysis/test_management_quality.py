@@ -38,6 +38,7 @@ class TestManagementQualityHandler:
             patch("analysis.management_quality.handler.store_analysis_result") as mock_store,
             patch("analysis.management_quality.handler.CostTracker") as mock_tracker_cls,
             patch("analysis.management_quality.handler.S3Client") as mock_s3_cls,
+            patch("analysis.management_quality.handler.LessonsClient") as mock_lessons_cls,
         ):
             mock_tracker = MagicMock()
             mock_tracker.check_budget.return_value = {
@@ -54,6 +55,10 @@ class TestManagementQualityHandler:
             mock_s3 = MagicMock()
             mock_s3.get_filing_context.return_value = ("No context.", False)
             mock_s3_cls.return_value = mock_s3
+
+            mock_lessons = MagicMock()
+            mock_lessons.get_relevant_lessons.return_value = ""
+            mock_lessons_cls.return_value = mock_lessons
 
             from analysis.management_quality.handler import handler
 

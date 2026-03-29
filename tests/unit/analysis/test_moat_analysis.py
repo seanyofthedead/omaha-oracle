@@ -39,6 +39,7 @@ class TestMoatAnalysisHandler:
             patch("analysis.moat_analysis.handler.store_analysis_result") as mock_store,
             patch("analysis.moat_analysis.handler.CostTracker") as mock_tracker_cls,
             patch("analysis.moat_analysis.handler.S3Client") as mock_s3_cls,
+            patch("analysis.moat_analysis.handler.LessonsClient") as mock_lessons_cls,
         ):
             mock_tracker = MagicMock()
             mock_tracker.check_budget.return_value = {
@@ -55,6 +56,10 @@ class TestMoatAnalysisHandler:
             mock_s3 = MagicMock()
             mock_s3.get_filing_context.return_value = ("No context available.", False)
             mock_s3_cls.return_value = mock_s3
+
+            mock_lessons = MagicMock()
+            mock_lessons.get_relevant_lessons.return_value = ""
+            mock_lessons_cls.return_value = mock_lessons
 
             from analysis.moat_analysis.handler import handler
 

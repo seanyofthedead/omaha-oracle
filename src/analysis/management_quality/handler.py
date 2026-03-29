@@ -14,6 +14,7 @@ from shared.config import get_config
 from shared.converters import format_metrics, normalize_ticker
 from shared.cost_tracker import CostTracker
 from shared.dynamo_client import store_analysis_result
+from shared.lessons_client import LessonsClient
 from shared.llm_client import LLMClient
 from shared.logger import get_logger
 from shared.s3_client import S3Client
@@ -112,7 +113,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         store_analysis_result(
             cfg.table_analysis,
             ticker,
-            "management_assessment",
+            "management_quality",
             result,
             result.get("management_score", 0) >= 6,
         )
@@ -136,6 +137,22 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         lambda m: _substitutions.get(m.group(1), m.group(0)),
         template,
     )
+
+    # Inject lessons from self-improvement feedback loop
+    sector = metrics.get("sector", "Unknown")
+    industry = metrics.get("industry", "Unknown")
+    try:
+        lessons_client = LessonsClient()
+        lessons_text = lessons_client.get_relevant_lessons(
+            ticker=ticker,
+            sector=str(sector),
+            industry=str(industry),
+            analysis_stage="management_quality",
+        )
+        if lessons_text:
+            system_prompt = f"{system_prompt}\n\n{lessons_text}"
+    except Exception:
+        _log.warning("Failed to retrieve lessons for management assessment", extra={"ticker": ticker})
 
     user_prompt = f"Assess management quality at {company_name} ({ticker})."
 
@@ -166,7 +183,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         store_analysis_result(
             cfg.table_analysis,
             ticker,
-            "management_assessment",
+            "management_quality",
             result,
             result.get("management_score", 0) >= 6,
         )
@@ -191,7 +208,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     store_analysis_result(
         cfg.table_analysis,
         ticker,
-        "management_assessment",
+        "management_quality",
         result,
         result.get("management_score", 0) >= 6,
     )

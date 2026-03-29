@@ -14,6 +14,7 @@ from shared.config import get_config
 from shared.converters import format_metrics, normalize_ticker
 from shared.cost_tracker import CostTracker
 from shared.dynamo_client import store_analysis_result
+from shared.lessons_client import LessonsClient
 from shared.llm_client import LLMClient
 from shared.logger import get_logger
 from shared.s3_client import S3Client
@@ -146,6 +147,20 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         lambda m: _substitutions.get(m.group(1), m.group(0)),
         template,
     )
+
+    # Inject lessons from self-improvement feedback loop
+    try:
+        lessons_client = LessonsClient()
+        lessons_text = lessons_client.get_relevant_lessons(
+            ticker=ticker,
+            sector=str(sector),
+            industry=str(industry),
+            analysis_stage="moat_analysis",
+        )
+        if lessons_text:
+            system_prompt = f"{system_prompt}\n\n{lessons_text}"
+    except Exception:
+        _log.warning("Failed to retrieve lessons for moat analysis", extra={"ticker": ticker})
 
     user_prompt = f"Analyze the competitive moat of {company_name} ({ticker})."
 

@@ -34,12 +34,12 @@ _QUANT_THRESHOLDS = {
 _STATUS_LABELS = {
     "thesis_generated": "Thesis Generated",
     "passed_intrinsic_value": "Passed IV",
-    "passed_management_assessment": "Passed Mgmt",
+    "passed_management_quality": "Passed Mgmt",
     "passed_moat_analysis": "Passed Moat",
     "passed_quant_screen": "Passed Quant",
     "failed_thesis_generator": "Failed Thesis",
     "failed_intrinsic_value": "Failed IV",
-    "failed_management_assessment": "Failed Mgmt",
+    "failed_management_quality": "Failed Mgmt",
     "failed_moat_analysis": "Failed Moat",
     "failed_quant_screen": "Failed Quant",
     "no_data": "No Data",
@@ -173,7 +173,7 @@ def _extract_failure_reasons(candidate: dict) -> list[str]:
         reasons.append(f"Moat: {score:.0f} < 7")
 
     # Management failure
-    mgmt = stages.get("management_assessment", {})
+    mgmt = stages.get("management_quality", {})
     if mgmt.get("passed") is False:
         score = _safe_float(mgmt.get("result", {}).get("management_score"))
         reasons.append(f"Mgmt: {score:.0f} < 6")
@@ -352,7 +352,7 @@ def _render_funnel(candidates: list[dict]) -> None:
         f"Screened ({total})",
         f"Quant Pass ({stage_counts.get('quant_screen', 0)})",
         f"Moat Pass ({stage_counts.get('moat_analysis', 0)})",
-        f"Mgmt Pass ({stage_counts.get('management_assessment', 0)})",
+        f"Mgmt Pass ({stage_counts.get('management_quality', 0)})",
         f"IV Pass ({stage_counts.get('intrinsic_value', 0)})",
         f"Thesis ({stage_counts.get('thesis_generator', 0)})",
     ]
@@ -360,7 +360,7 @@ def _render_funnel(candidates: list[dict]) -> None:
         total,
         stage_counts.get("quant_screen", 0),
         stage_counts.get("moat_analysis", 0),
-        stage_counts.get("management_assessment", 0),
+        stage_counts.get("management_quality", 0),
         stage_counts.get("intrinsic_value", 0),
         stage_counts.get("thesis_generator", 0),
     ]
@@ -427,7 +427,7 @@ def _render_candidates_table(candidates: list[dict], held: set[str], pending: se
                 "Status": status,
                 "Quant": _stage_indicator("quant_screen"),
                 "Moat": _stage_indicator("moat_analysis"),
-                "Mgmt": _stage_indicator("management_assessment"),
+                "Mgmt": _stage_indicator("management_quality"),
                 "IV": _stage_indicator("intrinsic_value"),
                 "Thesis": _stage_indicator("thesis_generator"),
                 "Moat Score": _safe_float(c.get("moat_score")) or None,
@@ -488,7 +488,7 @@ def _render_candidate_detail(candidate: dict) -> None:
                         display = f"{val * 100:.1f}%"
                     with cols[i % 3]:
                         st.metric(name, display)
-            elif stage_key in ("moat_analysis", "management_assessment"):
+            elif stage_key in ("moat_analysis", "management_quality"):
                 cols = st.columns(3)
                 score_key = "moat_score" if stage_key == "moat_analysis" else "management_score"
                 with cols[0]:

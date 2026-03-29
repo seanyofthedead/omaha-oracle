@@ -36,10 +36,10 @@ ADJUSTMENT_MAX = 1.5
 def _stage_to_lesson_types(stage: str) -> list[str]:
     """Map analysis stage to relevant lesson_type values."""
     mapping: dict[str, list[str]] = {
-        "moat_analysis": ["moat_bias", "sector_bias"],
-        "management_quality": ["management_bias"],
-        "intrinsic_value": ["valuation_bias", "threshold_adjustment"],
-        "thesis_generator": ["moat_bias", "valuation_bias", "management_bias", "sector_bias"],
+        "moat_analysis": ["moat_bias", "sector_bias", "prediction_miss"],
+        "management_quality": ["management_bias", "prediction_miss"],
+        "intrinsic_value": ["valuation_bias", "threshold_adjustment", "prediction_miss"],
+        "thesis_generator": ["moat_bias", "valuation_bias", "management_bias", "sector_bias", "prediction_miss"],
     }
     return mapping.get(stage, [])
 
