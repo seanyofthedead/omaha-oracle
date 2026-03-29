@@ -112,7 +112,14 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         f_llm = ex.submit(_get_llm_spend, month_key)
         f_aws = ex.submit(_get_aws_spend, month_key)
     llm_spend = f_llm.result()
-    aws_spend = f_aws.result()
+    try:
+        aws_spend = f_aws.result()
+    except Exception as exc:
+        _log.error(
+            "AWS Cost Explorer failed — falling back to aws_spend=0.0",
+            extra={"error": str(exc)},
+        )
+        aws_spend = 0.0
     total_spend = llm_spend + aws_spend
 
     utilization_pct = (total_spend / monthly_budget * 100) if monthly_budget > 0 else 0.0

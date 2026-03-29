@@ -17,7 +17,7 @@ from shared.llm_client import LLMClient
 from shared.logger import get_logger
 from shared.s3_client import S3Client
 
-from .prompts import LESSON_EXTRACTION_PROMPT
+from .prompts import LESSON_EXTRACTION_PROMPT, OWNERS_LETTER_PROMPT
 
 _log = get_logger(__name__)
 
@@ -61,7 +61,14 @@ def generate_letter(
 ) -> tuple[str, str]:
     """Phase 2: Generate letter via LLM, store to S3."""
     template_path = PROMPTS_DIR / "owners_letter.md"
-    template = template_path.read_text(encoding="utf-8") if template_path.exists() else ""
+    if template_path.exists():
+        template = template_path.read_text(encoding="utf-8")
+    else:
+        _log.error(
+            "owners_letter.md template not found at %s — falling back to built-in prompt",
+            template_path,
+        )
+        template = OWNERS_LETTER_PROMPT
 
     audit_text = json.dumps(decision_audit, indent=2, default=str)
     portfolio_text = json.dumps(portfolio_summary, indent=2, default=str)
