@@ -66,45 +66,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 }
             )
 
-        # Debug: which criteria failed (for both pass and fail)
-        pe = result.get("pe", 0)
-        pb = result.get("pb", 0)
-        de = result.get("debt_equity", 0)
-        roic = result.get("roic_10y_avg", 0)
-        pfcf = result.get("positive_fcf_years", 0)
-        pio = result.get("piotroski_score", 0)
-        pe_max = float(thresholds.get("max_pe", 15))
-        pb_max = float(thresholds.get("max_pb", 1.5))
-        de_max = float(thresholds.get("max_debt_equity", 0.5))
-        roic_min = float(thresholds.get("min_roic_avg", 0.12))
-        fcf_min = int(float(thresholds.get("min_positive_fcf_years", 8)))
-        piot_min = int(float(thresholds.get("min_piotroski", 6)))
-
-        failed: list[str] = []
-        if pe > 0 and pe >= pe_max:
-            failed.append("pe")
-        if pb > 0 and pb >= pb_max:
-            failed.append("pb")
-        if de >= de_max:
-            failed.append("debt_equity")
-        if roic < roic_min:
-            failed.append("roic")
-        if pfcf < fcf_min:
-            failed.append("positive_fcf_years")
-        if pio < piot_min:
-            failed.append("piotroski")
-
+        # failed_criteria is now computed inside screen_company
         _log.debug(
             "Quant screen result",
             extra={
                 "ticker": ticker,
-                "pe": round(pe, 2),
-                "pb": round(pb, 2),
-                "debt_equity": round(de, 3),
-                "roic_10y_avg_pct": round(roic * 100, 1),
-                "piotroski": pio,
-                "positive_fcf_years": pfcf,
-                "failed_criteria": failed,
+                "failed_criteria": result.get("failed_criteria", []),
                 "passed": passed,
             },
         )

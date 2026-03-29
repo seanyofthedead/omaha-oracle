@@ -130,8 +130,9 @@ def _passes_all_stages(event: dict[str, Any]) -> tuple[bool, str]:
         return False, f"management_score={mgmt_score}<{MGMT_MIN}"
 
     mos = safe_float(event.get("margin_of_safety", 0))
-    if mos <= MOS_MIN:
-        return False, f"margin_of_safety={mos:.2%}<={MOS_MIN:.0%}"
+    mos_threshold = safe_float(event.get("mos_threshold"), default=0.30)
+    if mos <= mos_threshold:
+        return False, f"margin_of_safety={mos:.2%}<={mos_threshold:.0%}"
 
     return True, ""
 

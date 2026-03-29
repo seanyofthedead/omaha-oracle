@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from shared.config import get_config
-from shared.converters import normalize_ticker, safe_float
+from shared.converters import compute_owner_earnings, normalize_ticker, safe_float
 from shared.dynamo_client import DynamoClient, store_analysis_result
 from shared.logger import get_logger
 
@@ -47,7 +47,7 @@ def _extract_inputs(metrics: dict[str, Any]) -> dict[str, float]:
         ni = get("net_income", "netIncome")
         dep = get("depreciation")
         capex = get("capex")
-        owner_earnings = ni + dep - 0.7 * capex
+        owner_earnings = compute_owner_earnings(ni, dep, capex)
 
     ca = get("current_assets", "currentAssets")
     tl = get("total_liabilities", "totalLiabilities")
