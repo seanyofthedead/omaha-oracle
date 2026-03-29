@@ -81,12 +81,12 @@ def render() -> None:
             "month. Consider deferring non-critical analysis runs."
         )
 
-    if "page_toast_shown" not in st.session_state:
+    if "cost_tracker_toast_shown" not in st.session_state:
         st.toast(
             f"Showing {months} months of spend data",
             icon="✅",
         )
-        st.session_state.page_toast_shown = True
+        st.session_state.cost_tracker_toast_shown = True
 
     st.divider()
 

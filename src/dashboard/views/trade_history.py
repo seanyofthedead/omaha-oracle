@@ -11,37 +11,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.alpaca_errors import handle_alpaca_error
-from dashboard.alpaca_models import OrderInfo
-from dashboard.alpaca_session import get_alpaca_client
 from dashboard.charts import ACCENT_GREEN, ACCENT_RED, get_chart_template
+from dashboard.data import fetch_closed_orders
 from dashboard.fmt import fmt_currency, fmt_currency_short, fmt_date, fmt_datetime
-
-# ── Data fetching ────────────────────────────────────────────────────────
-
-
-@st.cache_data(ttl=120, show_spinner=False)
-def _fetch_closed_orders(limit: int = 500) -> list[dict]:
-    client = get_alpaca_client()
-    orders = client.get_orders(status="closed", limit=limit)
-    return [_order_to_dict(o) for o in orders]
-
-
-def _order_to_dict(o: OrderInfo) -> dict:
-    return {
-        "order_id": o.order_id,
-        "symbol": o.symbol,
-        "side": o.side,
-        "qty": o.qty,
-        "order_type": o.order_type,
-        "time_in_force": o.time_in_force,
-        "status": o.status,
-        "created_at": o.created_at,
-        "filled_at": o.filled_at,
-        "filled_avg_price": o.filled_avg_price,
-        "limit_price": o.limit_price,
-        "stop_price": o.stop_price,
-    }
-
 
 # ── Render ───────────────────────────────────────────────────────────────
 
@@ -51,7 +23,7 @@ def render() -> None:
     st.header("Trade History")
 
     try:
-        orders = _fetch_closed_orders()
+        orders = fetch_closed_orders()
     except Exception as exc:
         handle_alpaca_error(exc)
         return

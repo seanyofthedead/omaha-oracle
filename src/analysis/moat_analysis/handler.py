@@ -124,7 +124,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             ticker,
             "moat_analysis",
             result,
-            result.get("moat_score", 0) >= 6,
+            result.get("moat_score", 0) >= 7,
         )
         return result
 
@@ -199,7 +199,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             ticker,
             "moat_analysis",
             result,
-            result.get("moat_score", 0) >= 6,
+            result.get("moat_score", 0) >= 7,
         )
         raise
 
@@ -230,6 +230,6 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         ticker,
         "moat_analysis",
         result,
-        result.get("moat_score", 0) >= 6,
+        result.get("moat_score", 0) >= 7,
     )
     return result

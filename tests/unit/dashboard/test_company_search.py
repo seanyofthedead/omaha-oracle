@@ -10,9 +10,9 @@ import threading
 class TestThreadSafeProgress:
     def test_search_progress_dict_is_thread_safe(self):
         """Concurrent read/write to progress dict must not raise or corrupt state."""
-        from dashboard.views.company_search import ThreadSafeDict
+        from dashboard.search_runner import ThreadSafeProgress
 
-        progress = ThreadSafeDict()
+        progress = ThreadSafeProgress()
         errors: list[Exception] = []
 
         def writer():

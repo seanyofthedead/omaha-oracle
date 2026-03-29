@@ -10,35 +10,7 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
 from dashboard.search_config import SearchConfig
-from dashboard.search_runner import SearchResult, run_search
-
-
-class ThreadSafeDict:
-    """A dict-like wrapper guarded by a threading.Lock for safe cross-thread access."""
-
-    def __init__(self) -> None:
-        self._data: dict[str, Any] = {}
-        self._lock = threading.Lock()
-
-    def update(self, other: dict[str, Any]) -> None:
-        with self._lock:
-            self._data.update(other)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        with self._lock:
-            return self._data.get(key, default)
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        with self._lock:
-            self._data[key] = value
-
-    def __getitem__(self, key: str) -> Any:
-        with self._lock:
-            return self._data[key]
-
-    def __contains__(self, key: str) -> bool:
-        with self._lock:
-            return key in self._data
+from dashboard.search_runner import SearchResult, ThreadSafeProgress, run_search
 
 
 def render() -> None:
@@ -138,7 +110,7 @@ def _render_config_form() -> None:
         cancel_event = threading.Event()
         st.session_state.search_cancel_event = cancel_event
 
-        progress: ThreadSafeDict = ThreadSafeDict()
+        progress: ThreadSafeProgress = ThreadSafeProgress()
         st.session_state.search_progress = progress
 
         thread = threading.Thread(

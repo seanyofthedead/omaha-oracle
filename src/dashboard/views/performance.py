@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.alpaca_errors import handle_alpaca_error
-from dashboard.alpaca_session import get_alpaca_client
 from dashboard.analytics import (
     PortfolioHistory,
     build_journal_entries,
@@ -18,6 +17,7 @@ from dashboard.analytics import (
     prepare_equity_chart_data,
 )
 from dashboard.charts import ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED, get_chart_template
+from dashboard.data import fetch_closed_orders
 from dashboard.fmt import fmt_currency, fmt_pct
 
 # ── Data fetching ────────────────────────────────────────────────────────
@@ -25,6 +25,8 @@ from dashboard.fmt import fmt_currency, fmt_pct
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_portfolio_history(period: str, timeframe: str) -> dict | None:
+    from dashboard.alpaca_session import get_alpaca_client
+
     client = get_alpaca_client()
     try:
         h = client.get_portfolio_history(period=period, timeframe=timeframe)
@@ -36,29 +38,6 @@ def _fetch_portfolio_history(period: str, timeframe: str) -> dict | None:
         }
     except Exception:
         return None
-
-
-@st.cache_data(ttl=120, show_spinner=False)
-def _fetch_closed_orders() -> list[dict]:
-    client = get_alpaca_client()
-    orders = client.get_orders(status="closed", limit=500)
-    return [
-        {
-            "order_id": o.order_id,
-            "symbol": o.symbol,
-            "side": o.side,
-            "qty": o.qty,
-            "order_type": o.order_type,
-            "time_in_force": o.time_in_force,
-            "status": o.status,
-            "created_at": o.created_at,
-            "filled_at": o.filled_at,
-            "filled_avg_price": o.filled_avg_price,
-            "limit_price": o.limit_price,
-            "stop_price": o.stop_price,
-        }
-        for o in orders
-    ]
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -121,7 +100,7 @@ def render() -> None:
 
     # ── Trade metrics ────────────────────────────────────────────────
     try:
-        order_dicts = _fetch_closed_orders()
+        order_dicts = fetch_closed_orders()
     except Exception as exc:
         handle_alpaca_error(exc)
         order_dicts = []
