@@ -199,9 +199,12 @@ def run_outcome_audit(
             "MISSED_OPPORTUNITY",
         ):
             mistake_count += 1
-            sector_mistakes["Unknown"] = sector_mistakes.get("Unknown", 0) + 1
+            sector = payload.get("sector") or item.get("sector") or "Unknown"
+            sector_mistakes[sector] = sector_mistakes.get(sector, 0) + 1
             if outcome == "BAD_BUY":
-                bad_buy_moat_scores.append(safe_float(payload.get("moat_score")))
+                moat_score = safe_float(payload.get("moat_score"))
+                if payload.get("moat_score") is not None and moat_score > 0:
+                    bad_buy_moat_scores.append(moat_score)
 
         # Summarize prediction outcomes if present
         prediction_summary = None
