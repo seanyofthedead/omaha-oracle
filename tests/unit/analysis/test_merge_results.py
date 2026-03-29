@@ -7,7 +7,10 @@ from __future__ import annotations  # noqa: I001
 from analysis.merge_results.handler import handler
 
 
-# Realistic branch outputs matching actual handler key contracts
+# Realistic branch outputs matching actual handler key contracts.
+# Both branches inherit moat-era pass-through keys (reasoning, confidence,
+# skipped, filing_context_degraded, cost_usd) via dict(event). Management
+# overwrites these with its own values; IV does not.
 _MGMT_OUTPUT = {
     "ticker": "AAPL",
     "company_name": "Apple Inc.",
@@ -21,8 +24,12 @@ _MGMT_OUTPUT = {
     "candor_transparency": 6,
     "red_flags": [],
     "green_flags": ["strong buyback program"],
+    # Management overwrites these moat-era pass-through keys:
     "reasoning": "Solid management team.",
     "confidence": 0.8,
+    "skipped": False,
+    "filing_context_degraded": False,
+    "cost_usd": 0.02,
 }
 
 _IV_OUTPUT = {
@@ -32,6 +39,13 @@ _IV_OUTPUT = {
     "moat_score": 8,
     "moat_type": "wide",
     "moat_sources": ["switching costs"],
+    # IV does NOT overwrite these — they retain moat's stale values:
+    "reasoning": "Apple has exceptional switching costs and brand power.",
+    "confidence": 0.85,
+    "skipped": False,
+    "filing_context_degraded": False,
+    "cost_usd": 0.01,
+    # IV-specific keys:
     "intrinsic_value_per_share": 210.0,
     "margin_of_safety": 0.45,
     "buy_signal": True,
@@ -103,6 +117,21 @@ class TestMergeResultsHandler:
             assert key in result, f"Missing management key: {key}"
         for key in _IV_OUTPUT:
             assert key in result, f"Missing IV key: {key}"
+
+    def test_management_wins_on_overlapping_keys(self) -> None:
+        """Management's reasoning/confidence/cost_usd overwrite IV's moat-era values."""
+        result = handler([_MGMT_OUTPUT, _IV_OUTPUT], None)
+        # Management's values should win, not IV's moat-era pass-throughs
+        assert result["reasoning"] == "Solid management team."
+        assert result["confidence"] == 0.8
+        assert result["cost_usd"] == 0.02
+
+    def test_management_wins_regardless_of_input_order(self) -> None:
+        """Management values win even when IV comes first in the input list."""
+        result = handler([_IV_OUTPUT, _MGMT_OUTPUT], None)
+        assert result["reasoning"] == "Solid management team."
+        assert result["confidence"] == 0.8
+        assert result["cost_usd"] == 0.02
 
     def test_thesis_required_fields_present(self) -> None:
         """Merged output contains all fields required by thesis generator."""
