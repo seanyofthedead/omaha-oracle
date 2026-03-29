@@ -272,6 +272,8 @@ class DataStack(cdk.Stack):
             "TABLE_DECISIONS": self.tbl_decisions.table_name,
             "TABLE_WATCHLIST": self.tbl_watchlist.table_name,
             "TABLE_LESSONS": self.tbl_lessons.table_name,
+            "TABLE_UNIVERSE": self.tbl_universe.table_name,
+            "TABLE_WEB_CANDIDATES": self.tbl_web_candidates.table_name,
             "S3_BUCKET": self.bucket.bucket_name,
             "ANALYSIS_QUEUE_URL": self.analysis_queue.queue_url,
             "SNS_TOPIC_ARN": alert_topic_arn,
@@ -291,7 +293,10 @@ class DataStack(cdk.Stack):
                 "dynamodb:Scan",
                 "dynamodb:BatchWriteItem",
             ],
-            resources=[f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*"],
+            resources=[
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*",
+                f"arn:aws:dynamodb:{self.region}:{self.account}:table/{prefix}-*/index/*",
+            ],
         )
         s3_policy = iam.PolicyStatement(
             actions=[
@@ -531,6 +536,7 @@ class DataStack(cdk.Stack):
 
     def _all_tables(self) -> list[dynamodb.Table]:
         return [
+            self.tbl_universe,
             self.tbl_companies,
             self.tbl_financials,
             self.tbl_analysis,
@@ -539,5 +545,6 @@ class DataStack(cdk.Stack):
             self.tbl_config,
             self.tbl_decisions,
             self.tbl_watchlist,
+            self.tbl_web_candidates,
             self.tbl_lessons,
         ]

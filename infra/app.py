@@ -19,7 +19,7 @@ from stacks.portfolio_stack import PortfolioStack
 
 app = cdk.App()
 
-env_name: str = app.node.try_get_context("env") or "dev"
+env_name: str = (app.node.try_get_context("env") or "dev").lower()
 
 # AWS env (account/region from CLI profile at deploy time)
 aws_env = cdk.Environment(

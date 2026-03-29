@@ -10,7 +10,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-_INFRA_DIR = Path(__file__).resolve().parents[3] / "infra"
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # chdir at import time so the JSII subprocess inherits the correct CWD.
-os.chdir(_INFRA_DIR)
+# Stacks reference asset paths like "infra/layer" and "src" relative to repo root.
+os.chdir(_REPO_ROOT)
