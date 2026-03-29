@@ -3,8 +3,8 @@ AnalysisStack — analysis Lambdas and Step Functions pipeline.
 
 Pipeline flow (triggered by SQS message or direct invocation):
   1. quant_screen       — fast quantitative filter
-  2. Map over passing_tickers:
-       moat → (if moat≥7) → management → intrinsic_value → (if MoS>30%) → thesis
+  2. Map over passing_tickers (max 3 concurrent):
+       moat → (if moat≥7) → Parallel(management, intrinsic_value) → merge → (if MoS>30%) → thesis
 """
 from __future__ import annotations
 
@@ -222,6 +222,14 @@ class AnalysisStack(cdk.Stack):
             timeout=Duration.minutes(10),
         )
 
+        self.fn_merge_results = _fn(
+            "FnMergeResults",
+            "analysis.merge_results.handler.handler",
+            "Merge parallel branch outputs into single dict",
+            memory_size=128,
+            timeout=Duration.seconds(10),
+        )
+
         # ---------------------------------------------------------------- #
         # SQS trigger for quant screen (import by ARN — no cross-stack ref) #
         # ---------------------------------------------------------------- #
@@ -314,13 +322,33 @@ class AnalysisStack(cdk.Stack):
         )
         thesis_step.add_retry(**_retry_kwargs)
 
-        # Chain: moat → (if moat≥7) → mgmt → iv → (if MoS>0.30) → thesis
+        merge_step = sfn_tasks.LambdaInvoke(
+            self,
+            "MergeResults",
+            lambda_function=self.fn_merge_results,
+            output_path="$.Payload",
+            comment="Flatten parallel branch outputs into single dict",
+        )
+        merge_step.add_retry(**_retry_kwargs)
+
+        # Parallel block: management + intrinsic value run concurrently.
+        # mgmt_step and iv_step must remain standalone (not chained) before
+        # being passed to .branch() — CDK does not allow reattaching chained states.
+        parallel_block = sfn.Parallel(
+            self,
+            "MgmtAndIvParallel",
+            comment="Run management quality and intrinsic value in parallel",
+        )
+        parallel_block.branch(mgmt_step)
+        parallel_block.branch(iv_step)
+
+        # Chain: moat → (if moat≥7) → parallel(mgmt, iv) → merge → (if MoS>0.30) → thesis
         moat_pass = sfn.Choice(self, "MoatPassCheck")
         mos_pass = sfn.Choice(self, "MarginOfSafetyCheck")
 
         moat_pass.when(
             sfn.Condition.number_greater_than_equals("$.moat_score", 7),
-            mgmt_step.next(iv_step).next(
+            parallel_block.next(merge_step).next(
                 mos_pass.when(
                     sfn.Condition.number_greater_than("$.margin_of_safety", 0.30),
                     thesis_step,
@@ -333,7 +361,7 @@ class AnalysisStack(cdk.Stack):
             "PerCompanyAnalysis",
             items_path="$.passing_tickers",
             max_concurrency=3,
-            comment="Run moat → mgmt → iv → thesis for each passing ticker",
+            comment="Run moat → parallel(mgmt, iv) → merge → thesis for each passing ticker",
         )
         per_company.iterator(moat_step.next(moat_pass))
         per_company.add_catch(pipeline_fail, result_path="$.error_info")

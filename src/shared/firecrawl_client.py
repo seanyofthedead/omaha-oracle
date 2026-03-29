@@ -94,22 +94,22 @@ class FirecrawlClient:
         Returns a dict with ``url``, ``markdown``, ``metadata``, ``json``
         (when schema extraction is used), and ``scraped_at``.
         """
-        params: dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if formats:
-            params["formats"] = formats
+            kwargs["formats"] = formats
         if wait_for is not None:
-            params["timeout"] = wait_for
+            kwargs["timeout"] = wait_for
         if headers:
-            params["headers"] = headers
+            kwargs["headers"] = headers
         if proxy:
-            params["proxy"] = proxy
+            kwargs["proxy"] = proxy
 
         last_exc: Exception | None = None
         for attempt in range(self._max_retries + 1):
             self._semaphore.acquire()
             try:
                 self._throttle()
-                result = self._app.scrape_url(url, params=params)
+                result = self._app.scrape(url, **kwargs)
                 self._track_credit()
                 return self._normalise_result(url, result)
             except Exception as exc:
