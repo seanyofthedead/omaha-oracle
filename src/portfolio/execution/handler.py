@@ -15,6 +15,9 @@ from shared.config import get_config
 from shared.converters import today_str
 from shared.dynamo_client import DynamoClient
 from shared.logger import get_logger
+from shared.portfolio_helpers import load_portfolio_state
+
+from portfolio.risk.guardrails import check_all_guardrails
 
 from .alpaca_client import AlpacaClient
 
@@ -31,7 +34,7 @@ def _check_trading_enabled(config_client: DynamoClient) -> None:
         aws dynamodb put-item --table-name omaha-oracle-prod-config \
           --item '{"pk":{"S":"config"},"sk":{"S":"trading_enabled"},"value":{"BOOL":false}}'
     """
-    item = config_client.get_item({"pk": "config", "sk": "trading_enabled"})
+    item = config_client.get_item({"config_key": "trading_enabled"})
     if item is not None and item.get("value") is False:
         raise RuntimeError(
             "Trading is disabled via kill switch (config.trading_enabled=false). "
@@ -117,7 +120,7 @@ def _sync_portfolio_state(alpaca: AlpacaClient, portfolio_table: str) -> None:
                     "shares": float(pos.get("qty") or 0),
                     "market_value": float(pos.get("market_value") or 0),
                     "cost_basis": float(pos.get("cost_basis") or 0),
-                    "sector": pos.get("asset_class", "equity"),
+                    "sector": pos.get("sector", "Unknown"),
                     "last_synced": now,
                 }
             )
@@ -204,17 +207,36 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             errors.append(f"{ticker}: no position_size_usd")
             continue
 
+        # Run guardrails before submitting any BUY order
+        portfolio_state = load_portfolio_state(cfg.table_portfolio)
+        proposed = {
+            "ticker": ticker,
+            "signal": "BUY",
+            "side": "buy",
+            "position_size_usd": position_usd,
+            "sector": dec.get("sector", "Unknown"),
+            "asset_type": "equity",
+        }
+        guard_result = check_all_guardrails(proposed, portfolio_state, {"exhausted": False})
+        if not guard_result.get("passed", False):
+            violations = guard_result.get("violations", [])
+            err = f"{ticker}: guardrail violations — {violations}"
+            _log.warning("BUY blocked by guardrails", extra={"ticker": ticker, "violations": violations})
+            errors.append(err)
+            continue
+
         # Idempotency: write a dedup sentinel before submitting to Alpaca.
         # If the sentinel already exists this is a Lambda retry — skip to avoid double order.
         dedup_key = f"DEDUP#{ticker}#buy#{today_str()}"
         already_submitted = not decisions_client.put_item_if_not_exists(
             {
-                "pk": dedup_key,
-                "sk": "DEDUP",
+                "decision_id": dedup_key,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "record_type": "DEDUP",
                 "ticker": ticker,
                 "side": "buy",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            },
+            pk_attr="decision_id",
         )
         if already_submitted:
             _log.warning(
@@ -289,12 +311,13 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         dedup_key = f"DEDUP#{ticker}#sell#{today_str()}"
         already_submitted = not decisions_client.put_item_if_not_exists(
             {
-                "pk": dedup_key,
-                "sk": "DEDUP",
+                "decision_id": dedup_key,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "record_type": "DEDUP",
                 "ticker": ticker,
                 "side": "sell",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            },
+            pk_attr="decision_id",
         )
         if already_submitted:
             _log.warning(

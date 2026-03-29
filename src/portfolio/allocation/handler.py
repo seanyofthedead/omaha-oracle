@@ -34,7 +34,7 @@ def _check_trading_enabled(config_client: DynamoClient) -> None:
         aws dynamodb put-item --table-name omaha-oracle-prod-config \
           --item '{"pk":{"S":"config"},"sk":{"S":"trading_enabled"},"value":{"BOOL":false}}'
     """
-    item = config_client.get_item({"pk": "config", "sk": "trading_enabled"})
+    item = config_client.get_item({"config_key": "trading_enabled"})
     if item is not None and item.get("value") is False:
         raise RuntimeError(
             "Trading is disabled via kill switch (config.trading_enabled=false). "

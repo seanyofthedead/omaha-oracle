@@ -167,6 +167,46 @@ class TestEvaluateSellPriceDeclineHold:
         assert result["signal"] == "HOLD"
 
 
+class TestCashReserveInBuy:
+    """Bug #5: evaluate_buy must reject when cash < 10% of portfolio value."""
+
+    def test_cash_below_10_pct_no_buy(self):
+        """Cash at 5% of portfolio should fail the buy evaluation."""
+        analysis = {
+            "margin_of_safety": 0.40,
+            "moat_score": 8,
+            "management_score": 7,
+            "sector": "Technology",
+        }
+        portfolio_state = {
+            "cash_available": 5_000,  # 5% of 100K — below 10% minimum
+            "portfolio_value": 100_000,
+            "positions": [],
+            "sector_exposure": {},
+        }
+        result = evaluate_buy("AAPL", analysis, portfolio_state)
+        assert result["signal"] == "NO_BUY"
+        assert any("cash reserve" in r.lower() or "10%" in r for r in result["reasons_fail"])
+
+    def test_cash_above_10_pct_passes_cash_check(self):
+        """Cash at 15% should pass the cash reserve check."""
+        analysis = {
+            "margin_of_safety": 0.40,
+            "moat_score": 8,
+            "management_score": 7,
+            "sector": "Technology",
+        }
+        portfolio_state = {
+            "cash_available": 15_000,  # 15% — above minimum
+            "portfolio_value": 100_000,
+            "positions": [],
+            "sector_exposure": {},
+        }
+        result = evaluate_buy("AAPL", analysis, portfolio_state)
+        assert result["signal"] == "BUY"
+        assert not any("cash reserve" in r.lower() for r in result["reasons_fail"])
+
+
 class TestEvaluateSellExtremeOvervaluation:
     """Extreme overvaluation (>150% IV) → SELL."""
 
