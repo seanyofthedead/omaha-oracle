@@ -16,9 +16,9 @@ def piotroski_score(by_year: dict[int, dict[str, float]], years_sorted: list[int
     def get(y: int, m: str) -> float:
         return by_year.get(y, {}).get(m, 0.0)
 
-    # Current year = most recent
-    curr_y = years_sorted[-1]
-    prev_y = years_sorted[-2]
+    # Current year = most recent (index 0 in desc-sorted list from caller)
+    curr_y = years_sorted[0]
+    prev_y = years_sorted[1]
 
     # 1. ROA > 0 (Net Income / Total Assets)
     ni = get(curr_y, "net_income")
