@@ -51,7 +51,9 @@ def build_analysis_event(
         "ticker": metadata.ticker,
         "company_name": metadata.company_name,
         "metrics": metrics,
-        "quant_passed": True,
+        # Must be False: manual uploads have not passed the quant screen,
+        # so the portfolio circuit breaker must block any auto-BUY signal.
+        "quant_passed": False,
         "source": "manual_upload",
         "upload_s3_key": upload_s3_key,
         "filing_type": metadata.filing_type,

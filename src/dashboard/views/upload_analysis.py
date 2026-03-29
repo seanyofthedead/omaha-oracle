@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from typing import Any
 
 import streamlit as st
@@ -192,15 +193,15 @@ def _render_moat_tab(result: dict[str, Any]) -> None:
     with col3:
         st.metric("Customer Captivity", f"{result.get('customer_captivity', 0)}/10")
 
-    st.markdown(f"**Reasoning:** {result.get('reasoning', 'N/A')}")
+    st.markdown(f"**Reasoning:** {html.escape(result.get('reasoning', 'N/A'))}")
 
     sources = result.get("moat_sources", [])
     if sources:
-        st.markdown("**Moat Sources:** " + ", ".join(sources))
+        st.markdown("**Moat Sources:** " + ", ".join(html.escape(s) for s in sources))
 
     risks = result.get("risks_to_moat", [])
     if risks:
-        st.markdown("**Risks:** " + ", ".join(risks))
+        st.markdown("**Risks:** " + ", ".join(html.escape(r) for r in risks))
 
 
 def _render_management_tab(result: dict[str, Any]) -> None:
@@ -219,14 +220,14 @@ def _render_management_tab(result: dict[str, Any]) -> None:
 
     reasoning = result.get("reasoning", "")
     if reasoning:
-        st.markdown(f"**Reasoning:** {reasoning}")
+        st.markdown(f"**Reasoning:** {html.escape(reasoning)}")
 
     green = result.get("green_flags", [])
     red = result.get("red_flags", [])
     if green:
-        st.markdown("**Green Flags:** " + ", ".join(green))
+        st.markdown("**Green Flags:** " + ", ".join(html.escape(f) for f in green))
     if red:
-        st.markdown("**Red Flags:** " + ", ".join(red))
+        st.markdown("**Red Flags:** " + ", ".join(html.escape(f) for f in red))
 
 
 def _render_valuation_tab(result: dict[str, Any]) -> None:

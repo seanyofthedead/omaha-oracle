@@ -50,10 +50,10 @@ class TestEventBuilder:
         assert event["source"] == "manual_upload"
         assert event["upload_s3_key"] == "uploads/AAPL/2025/10-K/file.pdf"
 
-    def test_build_event_sets_quant_passed_true(self):
-        """Manual uploads skip quant screen — quant_passed must be True."""
+    def test_build_event_sets_quant_passed_false(self):
+        """Manual uploads have not passed quant screen — quant_passed must be False."""
         event = build_analysis_event(_meta(), "uploads/AAPL/2025/10-K/file.pdf")
-        assert event["quant_passed"] is True
+        assert event["quant_passed"] is False
 
     def test_build_event_with_optional_metrics(self):
         extra = {"sector": "Technology", "industry": "Consumer Electronics", "currentPrice": 180.0}
