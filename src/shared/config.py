@@ -185,7 +185,7 @@ class Settings(BaseSettings):
             "table_decisions": f"omaha-oracle-{env}-decisions",
             "table_trades": f"omaha-oracle-{env}-trades",
             "table_macro": f"omaha-oracle-{env}-macro",
-            "table_cost_tracking": f"omaha-oracle-{env}-cost-tracking",
+            "table_cost_tracking": f"omaha-oracle-{env}-cost-tracker",
             "table_config": f"omaha-oracle-{env}-config",
             "table_watchlist": f"omaha-oracle-{env}-watchlist",
             "table_lessons": f"omaha-oracle-{env}-lessons",

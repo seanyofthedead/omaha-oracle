@@ -35,3 +35,4 @@ infra\layer/
 
 # Temporary debug files
 work-tmp/
+.playwright-cli/

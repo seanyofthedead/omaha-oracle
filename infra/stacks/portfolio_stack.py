@@ -86,7 +86,7 @@ class PortfolioStack(cdk.Stack):
             self,
             "DepsLayer",
             layer_version_name=f"{prefix}-portfolio-deps",
-            code=lambda_.Code.from_asset("layer"),
+            code=lambda_.Code.from_asset("infra/layer"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
             description="Omaha Oracle — pip deps for portfolio Lambdas",
         )
@@ -149,7 +149,7 @@ class PortfolioStack(cdk.Stack):
                 function_name=f"{prefix}-{construct_id.lower().replace('fn', '').strip('-')}",
                 runtime=lambda_.Runtime.PYTHON_3_12,
                 code=lambda_.Code.from_asset(
-                    "../src",
+                    "src",
                     exclude=["dashboard", "dashboard/**", "**/__pycache__", "**/*.pyc"],
                 ),
                 handler=handler,

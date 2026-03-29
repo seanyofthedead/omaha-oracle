@@ -984,6 +984,11 @@ def _render_search_progress() -> None:
         # Clean up
         for key in ("ps_progress", "ps_cancel", "ps_thread"):
             st.session_state.pop(key, None)
+        # Invalidate cached data so other tabs show fresh results
+        _fetch_all_candidates.clear()
+        _fetch_oracle_candidates.clear()
+        _fetch_run_dates.clear()
+        _fetch_recent_decisions.clear()
         st.rerun()
     else:
         if st.button("Cancel Search", key="ps_cancel_btn", type="secondary"):

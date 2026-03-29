@@ -182,6 +182,20 @@ class DataStack(cdk.Stack):
         self.tbl_watchlist = _table(
             "TblWatchlist", f"{prefix}-watchlist", pk="ticker"
         )
+        self.tbl_web_candidates = _table(
+            "TblWebCandidates", f"{prefix}-web-candidates", pk="ticker", sk="source_key"
+        )
+        self.tbl_web_candidates.add_global_secondary_index(
+            partition_key=dynamodb.Attribute(
+                name="status", type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="composite_score", type=dynamodb.AttributeType.NUMBER
+            ),
+            index_name="status-score-index",
+            projection_type=dynamodb.ProjectionType.ALL,
+        )
+
         self.tbl_lessons = _table(
             "TblLessons", f"{prefix}-lessons", pk="lesson_type", sk="lesson_id"
         )
@@ -238,7 +252,7 @@ class DataStack(cdk.Stack):
             self,
             "DepsLayer",
             layer_version_name=f"{prefix}-data-deps",
-            code=lambda_.Code.from_asset("layer"),
+            code=lambda_.Code.from_asset("infra/layer"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
             description="Omaha Oracle — pip deps for ingestion Lambdas",
         )
@@ -332,7 +346,7 @@ class DataStack(cdk.Stack):
                 function_name=f"{prefix}-{construct_id.lower()}",
                 runtime=lambda_.Runtime.PYTHON_3_12,
                 code=lambda_.Code.from_asset(
-                    "../src",
+                    "src",
                     exclude=["dashboard", "dashboard/**", "**/__pycache__", "**/*.pyc"],
                 ),
                 handler=handler,
@@ -343,10 +357,6 @@ class DataStack(cdk.Stack):
                 layers=[self._deps_layer],
                 log_retention=logs.RetentionDays.ONE_WEEK,
                 tracing=lambda_.Tracing.ACTIVE,
-                # Use unreserved (on-demand) concurrency — setting to 0 removes
-                # the reservation so it doesn't count against the account-wide
-                # unreserved-concurrency minimum of 10.
-                reserved_concurrent_executions=0,
             )
             fn.add_to_role_policy(dynamodb_policy)
             fn.add_to_role_policy(s3_policy)
@@ -480,7 +490,7 @@ class DataStack(cdk.Stack):
             function_name=f"omaha-oracle-{self._env_name}-{construct_id.lower()}",
             runtime=lambda_.Runtime.PYTHON_3_12,
             code=lambda_.Code.from_asset(
-                "../src",
+                "src",
                 exclude=["dashboard", "dashboard/**", "**/__pycache__", "**/*.pyc"],
             ),
             handler=handler,

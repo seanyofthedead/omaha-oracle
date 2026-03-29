@@ -292,7 +292,7 @@ class TestRenderPositionsTable:
         render_positions_table(mock_client)
 
         kwargs = mock_st.dataframe.call_args.kwargs
-        assert kwargs.get("use_container_width") is True
+        assert kwargs.get("width") == "stretch"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

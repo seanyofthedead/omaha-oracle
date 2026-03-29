@@ -100,7 +100,7 @@ class AnalysisStack(cdk.Stack):
             self,
             "DepsLayer",
             layer_version_name=f"{prefix}-analysis-deps",
-            code=lambda_.Code.from_asset("layer"),
+            code=lambda_.Code.from_asset("infra/layer"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_12],
             description="Omaha Oracle — pip deps for analysis Lambdas",
         )
@@ -161,7 +161,7 @@ class AnalysisStack(cdk.Stack):
                 function_name=f"{prefix}-{construct_id.lower().replace('fn', '').strip('-')}",
                 runtime=lambda_.Runtime.PYTHON_3_12,
                 code=lambda_.Code.from_asset(
-                    "../src",
+                    "src",
                     exclude=["dashboard", "dashboard/**", "**/__pycache__", "**/*.pyc"],
                 ),
                 handler=handler,
