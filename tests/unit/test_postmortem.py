@@ -54,12 +54,12 @@ class TestApplyThresholdAdjustments:
         config_client = MagicMock()
         config_client.get_item.return_value = {
             "config_key": "screening_thresholds",
-            "value": {"pe_max": 15.0},
+            "value": {"max_pe": 15.0},
         }
         lessons = [
             {
                 "severity": "minor",
-                "threshold_adjustment": {"parameter": "pe_max", "proposed_value": 25.0},
+                "threshold_adjustment": {"parameter": "max_pe", "proposed_value": 25.0},
                 "lesson_id": "L1",
             },
         ]
@@ -72,19 +72,19 @@ class TestApplyThresholdAdjustments:
         config_client = MagicMock()
         config_client.get_item.return_value = {
             "config_key": "screening_thresholds",
-            "value": {"pe_max": 15.0},
+            "value": {"max_pe": 15.0},
         }
         lessons_minor = [
             {
                 "severity": "minor",
-                "threshold_adjustment": {"parameter": "pe_max", "proposed_value": 14.0},
+                "threshold_adjustment": {"parameter": "max_pe", "proposed_value": 14.0},
                 "lesson_id": "L1",
             },
         ]
         lessons_moderate = [
             {
                 "severity": "moderate",
-                "threshold_adjustment": {"parameter": "pe_max", "proposed_value": 14.0},
+                "threshold_adjustment": {"parameter": "max_pe", "proposed_value": 14.0},
                 "lesson_id": "L2",
             },
         ]
@@ -100,7 +100,7 @@ class TestApplyThresholdAdjustments:
         lessons = [
             {
                 "severity": "moderate",
-                "threshold_adjustment": {"parameter": "roic_min", "proposed_value": 15},
+                "threshold_adjustment": {"parameter": "min_roic", "proposed_value": 15},
                 "lesson_id": "L1",
             },
         ]

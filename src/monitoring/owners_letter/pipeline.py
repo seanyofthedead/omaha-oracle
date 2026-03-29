@@ -26,6 +26,33 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 # Threshold adjustment cap
 MAX_CHANGE_PCT_PER_QUARTER = 0.20
 
+# Allowlist of parameter names that may be written to the config table.
+# Any parameter not on this list is silently rejected to prevent LLM-invented
+# keys from polluting the screening_thresholds config.
+ALLOWED_THRESHOLD_PARAMS: frozenset[str] = frozenset(
+    {
+        # Quant screen thresholds (keys used in screening_thresholds config)
+        "min_piotroski_f",
+        "max_pb_ratio",
+        "max_pe",
+        "min_roic",
+        "min_roic_avg",
+        "min_current_ratio",
+        "max_debt_equity",
+        "min_market_cap",
+        # Analysis quality gates
+        "min_moat_score",
+        "min_management_score",
+        "min_margin_of_safety",
+        # Portfolio risk parameters
+        "max_position_pct",
+        "max_sector_pct",
+        "min_cash_reserve_pct",
+        # Confidence calibration
+        "confidence_calibration_factor",
+    }
+)
+
 
 def _load_previous_lessons(lessons_client: LessonsClient) -> str:
     """Format active lessons for letter context."""
@@ -228,6 +255,15 @@ def apply_threshold_adjustments(
         param = adj.get("parameter")
         proposed = adj.get("proposed_value")
         if param is None or proposed is None:
+            continue
+
+        # Reject any parameter not on the allowlist to prevent LLM-invented
+        # keys from being written to the config table.
+        if param not in ALLOWED_THRESHOLD_PARAMS:
+            _log.warning(
+                "Rejected unknown threshold parameter from LLM: %s",
+                param,
+            )
             continue
 
         old_val = current.get(param)
