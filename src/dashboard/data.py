@@ -26,6 +26,7 @@ from shared.analysis_client import merge_latest_analysis
 from shared.config import get_config
 from shared.dynamo_client import DynamoClient
 from shared.logger import get_logger
+from shared.s3_client import S3Client
 
 _log = get_logger(__name__)
 
@@ -386,3 +387,48 @@ def load_portfolio_history() -> dict[str, Any]:
         "sell_dates": sell_dates,
         "metrics": metrics,
     }
+
+
+@st.cache_data(ttl=_TTL_STATIC, show_spinner=False)
+def load_thesis_content(ticker: str) -> str | None:
+    """Load the latest investment thesis markdown for *ticker*.
+
+    Queries the analysis table for thesis_generation results, extracts the
+    S3 key, and reads the markdown content.  Returns ``None`` when no thesis
+    exists or on any error (thesis display is best-effort).
+    """
+    try:
+        cfg = get_config()
+        client = DynamoClient(cfg.table_analysis)
+        items = client.query(
+            Key("ticker").eq(ticker),
+            scan_forward=False,
+            limit=20,
+        )
+    except Exception as exc:
+        _log.warning("load_thesis_content query failed for %s: %s", ticker, exc)
+        return None
+
+    if not items:
+        return None
+
+    # Find the most recent thesis_generation result with an S3 key
+    for item in items:
+        if item.get("screen_type") != "thesis_generation":
+            continue
+        result = item.get("result") or {}
+        s3_key = result.get("thesis_s3_key")
+        if not s3_key:
+            continue
+        try:
+            s3 = S3Client()
+            return s3.read_markdown(s3_key)
+        except Exception as exc:
+            _log.warning(
+                "load_thesis_content S3 read failed for %s: %s",
+                ticker,
+                exc,
+            )
+            return None
+
+    return None

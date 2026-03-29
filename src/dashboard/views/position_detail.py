@@ -7,6 +7,7 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
+from dashboard.data import load_thesis_content
 from dashboard.fmt import fmt_currency, fmt_null
 
 
@@ -55,7 +56,11 @@ def render_position_detail(position: dict[str, Any], portfolio_value: float) -> 
     )
 
     with tab_thesis:
-        st.info(f"No investment thesis found for {ticker}.")
+        thesis = load_thesis_content(ticker)
+        if thesis:
+            st.markdown(thesis)
+        else:
+            st.info(f"No investment thesis found for {ticker}.")
 
     with tab_chart:
         # Fetch price chart using yfinance
